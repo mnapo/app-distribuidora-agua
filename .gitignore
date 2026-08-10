@@ -1,0 +1,16 @@
+node_modules/
+.npm-cache/
+.tmp/
+.codex-remote-attachments/
+.next/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+storage/
+*.log
+*.tsbuildinfo
+npm-debug.log*
+prisma/*.db
+apps/api/generated/

@@ -1,0 +1,622 @@
+# Progreso del proyecto
+
+## Etapa 0 - Inicializacion y arquitectura
+
+- Fecha: 2026-08-09
+- Estado: completada
+- Alcance autorizado: base tecnica local sin Docker para desarrollo; Docker solo para produccion.
+- Decisiones:
+  - Monorepo npm workspaces con `apps/api` y `apps/web`.
+  - Backend NestJS con API versionada bajo `/api/v1`.
+  - Frontend Next.js con Tailwind CSS.
+  - Prisma preparado para MySQL local.
+  - Tabla tecnica inicial `app_metadata` para validar Prisma sin introducir entidades comerciales.
+  - Storage abstraido con implementacion local inicial.
+- Pendientes:
+  - Configurar MySQL local y ejecutar migraciones en la maquina del desarrollador.
+  - Iniciar servidores locales para prueba funcional manual.
+  - No hay modulos comerciales implementados; corresponden a etapas futuras.
+
+## Etapa 1 - Nucleo SaaS, autenticacion y seguridad
+
+- Fecha: 2026-08-09
+- Estado: completada
+- Funcionalidades:
+  - Tenants y tenant settings basicas.
+  - Usuarios tenant-scoped.
+  - Autenticacion con access token JWT y refresh tokens persistidos.
+  - Roles y permisos configurables por tenant.
+  - Platform Admin basico para listar/crear/actualizar tenants.
+  - Auditoria inicial para login, tenants, usuarios, roles y seed.
+  - Pantalla web de login y dashboard inicial de administracion.
+- Migraciones:
+  - `apps/api/prisma/migrations/20260809130000_stage_1_core_saas/migration.sql`
+- Usuarios de prueba por seed:
+  - `platform@aguadistri.local` / `Admin123!`
+  - `admin@norte.local` / `Admin123!` / tenant `norte`
+  - `admin@sur.local` / `Admin123!` / tenant `sur`
+- Decisiones:
+  - El backend deriva `tenantId` desde el usuario autenticado en operaciones tenant-scoped.
+  - Platform Admin no administra usuarios internos desde `/users`; solo tenants desde `/tenants`.
+  - El frontend guarda tokens en `localStorage` para esta etapa inicial. Puede migrarse a cookies httpOnly/BFF cuando se endurezca seguridad de frontend.
+- Pruebas ejecutadas:
+  - `npm run lint`
+  - `npm run typecheck`
+  - `npm run build`
+  - `npm test -w apps/api`
+  - `npm audit --omit=dev --cache .npm-cache --strict-ssl false`
+  - `prisma validate` con `DATABASE_URL` dummy
+- Pendientes:
+  - Ejecutar `npm run prisma:migrate` y `npm run prisma:seed` contra MySQL local real.
+  - Probar flujo completo en navegador con backend/frontend levantados.
+  - Recuperacion de contrasena, cambio de contrasena y sesiones avanzadas quedan para endurecimiento posterior.
+  - Modulos comerciales no implementados; corresponden a Etapa 2 en adelante.
+
+## Etapa 2 - Maestros comerciales
+
+- Fecha: 2026-08-09
+- Estado: completada tecnicamente, pendiente de prueba funcional con MySQL real.
+- Funcionalidades:
+  - Sucursales.
+  - Depositos.
+  - Clientes.
+  - Direcciones de clientes en alta.
+  - Categorias de productos.
+  - Productos.
+  - Listas de precios.
+  - Items de listas de precios.
+  - Precios especificos por cliente/producto.
+  - Busqueda, paginacion y filtro `active` en listados.
+  - Pantalla web ampliada para altas rapidas y listados de maestros.
+- Migraciones:
+  - `apps/api/prisma/migrations/20260809143000_stage_2_commercial_masters/migration.sql`
+- Endpoints:
+  - `/api/v1/branches`
+  - `/api/v1/warehouses`
+  - `/api/v1/customers`
+  - `/api/v1/product-categories`
+  - `/api/v1/products`
+  - `/api/v1/price-lists`
+  - `/api/v1/price-lists/customer-product-prices`
+- Decisiones:
+  - Todas las operaciones de maestros requieren usuario de tenant; Platform Admin no opera maestros comerciales.
+  - El backend valida que IDs relacionados pertenezcan al tenant autenticado antes de crear o actualizar.
+  - No se implementaron importaciones/exportaciones avanzadas todavia; quedan preparadas para etapas posteriores.
+- Pruebas ejecutadas:
+  - `npm run prisma:generate`
+  - `npm run lint`
+  - `npm run typecheck`
+  - `npm test -w apps/api`
+  - `npm run build`
+  - `npm audit --omit=dev --cache .npm-cache --strict-ssl false`
+  - `prisma validate` con `DATABASE_URL` dummy
+- Pendientes:
+  - Ejecutar migraciones contra MySQL real.
+  - Ejecutar seed para actualizar permisos de administradores tenant.
+  - Probar CRUD completo desde navegador.
+  - No se implemento stock, pedidos, rutas, ventas ni facturacion; corresponden a etapas futuras.
+
+## Etapa 3 - Stock, vehiculos y choferes
+
+- Fecha: 2026-08-09
+- Estado: completada tecnicamente, pendiente de prueba funcional con MySQL real.
+- Funcionalidades:
+  - Vehiculos.
+  - Choferes asociados a usuarios.
+  - Inventario por deposito.
+  - Inventario por vehiculo como stock movil.
+  - Movimientos de inventario.
+  - Carga de vehiculo.
+  - Devolucion de vehiculo.
+  - Pantalla web ampliada para vehiculos, choferes e inventario basico.
+- Migraciones:
+  - `apps/api/prisma/migrations/20260809160000_stage_3_inventory_vehicles_drivers/migration.sql`
+- Endpoints:
+  - `/api/v1/vehicles`
+  - `/api/v1/drivers`
+  - `/api/v1/inventory`
+  - `/api/v1/inventory/movements`
+  - `/api/v1/inventory/vehicle-load`
+  - `/api/v1/inventory/vehicle-return`
+- Decisiones:
+  - El stock solo se modifica mediante `inventory_movements`.
+  - Los saldos en `inventory` se actualizan dentro de la misma transaccion que crea el movimiento.
+  - Vehiculos funcionan como ubicacion movil de stock.
+  - No se implementa todavia cierre de reparto ni rutas; corresponden a etapas futuras.
+- Pruebas ejecutadas:
+  - `npm run prisma:generate`
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm test -w apps/api`
+  - `npm audit --omit=dev --cache .npm-cache --strict-ssl false`
+  - `npm run build`
+  - `prisma validate` con `DATABASE_URL` dummy
+- Pendientes:
+  - Ejecutar migraciones contra MySQL real.
+  - Ejecutar seed para actualizar permisos de administradores tenant.
+  - Probar flujo real: crear producto, deposito, vehiculo, compra inicial, carga de vehiculo y devolucion.
+  - No se implemento reconstruccion/reporting avanzado de stock ni cierre de reparto; queda para etapas posteriores.
+
+## Etapa 4 - Pedidos
+
+- Fecha: 2026-08-09
+- Estado: completada tecnicamente, pendiente de prueba funcional con MySQL real.
+- Funcionalidades:
+  - Pedidos con estados `DRAFT`, `CONFIRMED`, `ASSIGNED` y `CANCELLED`.
+  - Items de pedido con cantidad, precio unitario, descuento, subtotal y total por linea.
+  - Calculo de totales del pedido.
+  - Resolucion de precios por prioridad: precio especifico cliente/producto, lista asignada al cliente, lista default y precio base del producto.
+  - Direccion de entrega denormalizada desde direccion primaria/seleccionada o cargada manualmente.
+  - Confirmacion de pedidos.
+  - Asignacion a chofer y vehiculo.
+  - Cancelacion con motivo.
+  - Historial de creacion, modificacion y transiciones de estado.
+  - Pantalla web ampliada para crear, confirmar, asignar y cancelar pedidos basicos.
+- Migraciones:
+  - `apps/api/prisma/migrations/20260809173000_stage_4_orders/migration.sql`
+- Endpoints:
+  - `/api/v1/orders`
+  - `/api/v1/orders/:id`
+  - `/api/v1/orders/:id/confirm`
+  - `/api/v1/orders/:id/assign`
+  - `/api/v1/orders/:id/cancel`
+- Decisiones:
+  - La asignacion queda limitada a chofer/vehiculo; rutas y secuencia corresponden a Etapa 5.
+  - Los pedidos asignados o cancelados no se modifican desde esta etapa.
+  - Cada cambio relevante registra `order_history` y auditoria.
+  - No se descuenta stock al confirmar/asignar; la integracion con preparacion/reparto queda para Etapa 5.
+- Pruebas ejecutadas:
+  - `npm run prisma:generate`
+  - `prisma validate` con `DATABASE_URL` dummy
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm test -w apps/api`
+  - `npm run build`
+  - `npm audit --omit=dev --cache .npm-cache --strict-ssl false`
+- Pendientes:
+  - Ejecutar migraciones contra MySQL real.
+  - Ejecutar seed para actualizar permisos de administradores tenant.
+  - Probar flujo real desde navegador: crear cliente/producto, crear pedido, confirmar, asignar y cancelar.
+  - Rutas, preparacion de reparto y carga vinculada a ruta quedan para Etapa 5.
+
+## Etapa 5 - Rutas y distribucion web
+
+- Fecha: 2026-08-09
+- Estado: completada tecnicamente, pendiente de prueba funcional con MySQL real.
+- Funcionalidades:
+  - Rutas de reparto con fecha, deposito, chofer y vehiculo.
+  - Asignacion de pedidos a ruta.
+  - Secuencia de pedidos dentro de la ruta.
+  - Estados `DRAFT`, `PREPARED`, `LOADED`, `CLOSED_PRELIMINARY` y `CANCELLED`.
+  - Preparacion de ruta.
+  - Carga de vehiculo desde la ruta.
+  - Cierre preliminar de reparto.
+  - Historial de cambios de ruta.
+  - Pantalla web ampliada para crear, preparar, cargar, cerrar preliminarmente y cancelar rutas.
+- Migraciones:
+  - `apps/api/prisma/migrations/20260809190000_stage_5_delivery_routes/migration.sql`
+- Endpoints:
+  - `/api/v1/delivery-routes`
+  - `/api/v1/delivery-routes/:id`
+  - `/api/v1/delivery-routes/:id/prepare`
+  - `/api/v1/delivery-routes/:id/load-vehicle`
+  - `/api/v1/delivery-routes/:id/close-preliminary`
+  - `/api/v1/delivery-routes/:id/cancel`
+- Decisiones:
+  - Un pedido solo puede estar asignado a una ruta a la vez.
+  - Al incluir pedidos en una ruta, los pedidos quedan asignados al chofer y vehiculo de esa ruta.
+  - La carga del vehiculo agrega cantidades por producto de todos los pedidos de la ruta y crea movimientos `VEHICLE_LOAD`.
+  - El cierre implementado es preliminar; confirmacion de entrega, cobro y cierre final quedan para etapas posteriores.
+  - GPS no se implementa en esta etapa.
+- Pruebas ejecutadas:
+  - `npm run prisma:generate`
+  - `prisma validate` con `DATABASE_URL` dummy
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm test -w apps/api`
+  - `npm run build`
+  - `npm audit --omit=dev --cache .npm-cache --strict-ssl false`
+- Pendientes:
+  - Ejecutar migraciones contra MySQL real.
+  - Ejecutar seed para actualizar permisos de administradores tenant.
+  - Probar flujo real desde navegador: pedido confirmado, crear ruta, preparar, cargar vehiculo y cierre preliminar.
+  - Aplicacion movil del repartidor queda para Etapa 6.
+
+## Etapa 6 - Aplicacion movil del repartidor MVP
+
+- Fecha: 2026-08-09
+- Estado: completada tecnicamente, pendiente de prueba funcional con MySQL real.
+- Funcionalidades:
+  - API movil para repartidores autenticados.
+  - Listado de rutas asignadas al chofer autenticado.
+  - Detalle de clientes, direcciones, pedidos e items de la ruta.
+  - Confirmacion de entrega.
+  - Modificacion de cantidades entregadas cuando el tenant lo permite.
+  - Venta adicional movil cuando el tenant lo permite.
+  - Cobro basico registrado como monto cobrado en el stop.
+  - Observaciones.
+  - Entrega fallida con motivo.
+  - Descuento de stock del vehiculo mediante movimientos `DELIVERY`.
+  - Vista web responsive `/mobile` como MVP operativo del repartidor.
+- Migraciones:
+  - `apps/api/prisma/migrations/20260809203000_stage_6_7_driver_mobile_offline/migration.sql`
+- Endpoints:
+  - `/api/v1/driver-mobile/routes`
+  - `/api/v1/driver-mobile/routes/:id`
+  - `/api/v1/driver-mobile/stops/:routeOrderId/complete`
+  - `/api/v1/driver-mobile/stops/:routeOrderId/fail`
+- Decisiones:
+  - Solo usuarios asociados a un chofer activo pueden operar el modulo movil.
+  - El cobro es registro operativo basico; facturacion, pagos formales y cuenta corriente quedan para Etapa 9.
+  - La venta adicional se registra como item entregado adicional, no como factura.
+  - El cierre final de reparto no se implementa todavia; se mantiene cierre preliminar de Etapa 5.
+- Pruebas ejecutadas:
+  - `npm run prisma:generate`
+  - `prisma validate` con `DATABASE_URL` dummy
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm test -w apps/api`
+  - `npm run build`
+  - `npm audit --omit=dev --cache .npm-cache --strict-ssl false`
+- Pendientes:
+  - Ejecutar migraciones contra MySQL real.
+  - Ejecutar seed para actualizar permisos de administradores tenant.
+  - Probar jornada real desde `/mobile`.
+
+## Etapa 7 - GPS, firma, fotos y offline
+
+- Fecha: 2026-08-09
+- Estado: completada tecnicamente, pendiente de prueba funcional con MySQL real.
+- Funcionalidades:
+  - GPS opcional, obligatorio o deshabilitado segun `tenant_settings.gps_mode`.
+  - Coordenadas de entrega, precision y distancia al cliente cuando existe direccion geolocalizada.
+  - Firma digital como archivo base64 guardado con `StorageProvider`.
+  - Foto de entrega/falla como archivo base64 guardado con `StorageProvider`.
+  - Evidencias persistidas en `delivery_evidences`.
+  - Cola offline parcial en frontend movil con `localStorage`.
+  - Endpoint de sincronizacion `/api/v1/driver-mobile/sync`.
+  - Idempotencia por `tenant_id + idempotency_key` en `offline_sync_operations`.
+- Migraciones:
+  - `apps/api/prisma/migrations/20260809203000_stage_6_7_driver_mobile_offline/migration.sql`
+- Decisiones:
+  - No se implementa tracking GPS continuo.
+  - La operacion offline cubre completar/fallar entregas; no intenta replicar todo el modulo administrativo.
+  - Si una operacion ya fue aplicada, el backend devuelve el resultado previo por idempotencia.
+  - La firma y foto respetan `requires_signature` y `delivery_photo_mode`.
+- Pruebas ejecutadas:
+  - `npm run prisma:generate`
+  - `prisma validate` con `DATABASE_URL` dummy
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm test -w apps/api`
+  - `npm run build`
+  - `npm audit --omit=dev --cache .npm-cache --strict-ssl false`
+- Pendientes:
+  - Ejecutar migraciones contra MySQL real.
+  - Probar captura real de GPS, firma/foto y sincronizacion offline en navegador movil.
+  - Endurecer UX de captura de firma/foto con componentes dedicados si se decide avanzar sobre app movil real.
+
+## Etapa 8 - Envases retornables
+
+- Fecha: 2026-08-09
+- Estado: completada tecnicamente, pendiente de prueba funcional con MySQL real.
+- Funcionalidades:
+  - Tipos de envase.
+  - Movimientos de envases entregados, recuperados y ajustes.
+  - Saldos por cliente y tipo de envase.
+  - Reporte de movimientos.
+  - Consulta de envases por cliente.
+  - Integracion con entrega mediante `routeOrderId` opcional en movimientos.
+  - Panel web basico para crear tipo de envase, entregar, recuperar y ver saldos.
+- Migraciones:
+  - `apps/api/prisma/migrations/20260809220000_stage_8_9_containers_billing/migration.sql`
+- Endpoints:
+  - `/api/v1/containers/types`
+  - `/api/v1/containers/movements`
+  - `/api/v1/containers/balances`
+- Decisiones:
+  - Saldo positivo significa envases en poder del cliente.
+  - Cada movimiento actualiza `customer_container_balances` en la misma transaccion.
+  - Los ajustes usan cantidad con signo positivo operativo; para correcciones negativas se usa movimiento `RETURNED`.
+- Pruebas ejecutadas:
+  - `npm run prisma:generate`
+  - `prisma validate` con `DATABASE_URL` dummy
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm test -w apps/api`
+  - `npm run build`
+  - `npm audit --omit=dev --cache .npm-cache --strict-ssl false`
+- Pendientes:
+  - Ejecutar migraciones contra MySQL real.
+  - Ejecutar seed para actualizar permisos.
+  - Probar movimientos vinculados a entregas reales.
+
+## Etapa 9 - Facturacion, pagos y cuenta corriente
+
+- Fecha: 2026-08-09
+- Estado: completada tecnicamente, pendiente de prueba funcional con MySQL real.
+- Funcionalidades:
+  - Facturas e items.
+  - Facturacion manual y desde pedido.
+  - Pagos.
+  - Asignacion de pagos a facturas.
+  - Cuenta corriente por movimientos explicativos.
+  - Saldo por cliente.
+  - Deuda vencida.
+  - Estados de cuenta.
+  - Cierre de caja/reparto basico.
+  - Panel web basico para facturar pedido, registrar pago y cerrar caja.
+- Migraciones:
+  - `apps/api/prisma/migrations/20260809220000_stage_8_9_containers_billing/migration.sql`
+- Endpoints:
+  - `/api/v1/billing/invoices`
+  - `/api/v1/billing/invoices/from-order`
+  - `/api/v1/billing/payments`
+  - `/api/v1/billing/account-statement/:customerId`
+  - `/api/v1/billing/overdue`
+  - `/api/v1/billing/cash-closings`
+- Decisiones:
+  - No se integra ARCA en esta etapa.
+  - Toda deuda se explica por `account_movements`.
+  - La factura genera debito; el pago genera credito; cada movimiento guarda `balance_after`.
+  - El cierre de caja compara monto esperado por entregas cobradas contra monto real declarado.
+- Pruebas ejecutadas:
+  - `npm run prisma:generate`
+  - `prisma validate` con `DATABASE_URL` dummy
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm test -w apps/api`
+  - `npm run build`
+  - `npm audit --omit=dev --cache .npm-cache --strict-ssl false`
+- Pendientes:
+  - Ejecutar migraciones contra MySQL real.
+  - Ejecutar seed para actualizar permisos.
+  - Probar cuenta corriente real con factura, pago parcial, pago total y deuda vencida.
+  - Endurecer numeracion fiscal y documentos legales si se decide integrar ARCA mas adelante.
+
+## Etapa 10 - Pedidos recurrentes
+
+- Fecha: 2026-08-09
+- Estado: completada tecnicamente, pendiente de prueba funcional con MySQL real.
+- Funcionalidades:
+  - Reglas de pedido recurrente por cliente y direccion opcional.
+  - Items recurrentes por producto.
+  - Frecuencias diaria, semanal y mensual con intervalo configurable.
+  - Fecha de inicio, fecha de fin opcional y proxima ejecucion.
+  - Suspension y reactivacion de reglas.
+  - Excepciones para saltar fechas puntuales.
+  - Generacion manual de pedidos futuros hasta una fecha limite.
+  - Control de duplicados por regla y fecha objetivo.
+  - Panel web basico para crear reglas, generar proximos pedidos y suspender reglas activas.
+- Migraciones:
+  - `apps/api/prisma/migrations/20260809233000_stage_10_11_recurring_subscriptions/migration.sql`
+- Endpoints:
+  - `/api/v1/recurring-orders/rules`
+  - `/api/v1/recurring-orders/rules/:id/suspend`
+  - `/api/v1/recurring-orders/rules/:id/activate`
+  - `/api/v1/recurring-orders/rules/:id/exceptions`
+  - `/api/v1/recurring-orders/generate`
+- Decisiones:
+  - No se agrego BullMQ/Redis en esta etapa; la generacion queda expuesta por endpoint operativo para evitar nueva infraestructura.
+  - La unicidad `rule_id + target_date` evita duplicar pedidos al regenerar el mismo horizonte.
+  - Los pedidos generados nacen con estado `DRAFT` y siguen el flujo normal de confirmacion, asignacion, ruta y facturacion.
+- Pruebas ejecutadas:
+  - `npm run prisma:generate`
+  - `prisma validate` con `DATABASE_URL` dummy
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm test -w apps/api`
+  - `npm run build`
+  - `npm audit --omit=dev --cache .npm-cache --strict-ssl false`
+- Pendientes:
+  - Ejecutar migraciones contra MySQL real.
+  - Ejecutar seed para actualizar permisos.
+  - Probar generacion real con reglas diarias, semanales, mensuales y excepciones.
+  - Definir si en produccion conviene automatizar la generacion con worker/cron.
+
+## Etapa 11 - Abonos
+
+- Fecha: 2026-08-09
+- Estado: completada tecnicamente, pendiente de prueba funcional con MySQL real.
+- Funcionalidades:
+  - Planes de abono mensuales o semanales.
+  - Items de plan con cantidades incluidas por producto.
+  - Clientes abonados con periodo vigente y renovacion.
+  - Estados activo, suspendido, cancelado y expirado.
+  - Registro de consumo por producto dentro del periodo.
+  - Vinculo opcional del consumo a una entrega de ruta.
+  - Resumen por producto con incluido, usado, restante y excedente.
+  - Panel web basico para crear plan, asignar cliente y registrar consumo.
+- Migraciones:
+  - `apps/api/prisma/migrations/20260809233000_stage_10_11_recurring_subscriptions/migration.sql`
+- Endpoints:
+  - `/api/v1/subscriptions/plans`
+  - `/api/v1/subscriptions`
+  - `/api/v1/subscriptions/usage`
+  - `/api/v1/subscriptions/:id/summary`
+  - `/api/v1/subscriptions/:id/renew`
+  - `/api/v1/subscriptions/:id/suspend`
+  - `/api/v1/subscriptions/:id/cancel`
+- Decisiones:
+  - El consumo se registra historicamente en `subscription_usages`; no se pisa el plan ni se reduce la cantidad incluida.
+  - El resumen calcula excedente cuando el uso supera la cantidad incluida del periodo.
+  - La facturacion automatica de excedentes queda pendiente para una etapa posterior de reglas comerciales/facturacion avanzada.
+- Pruebas ejecutadas:
+  - `npm run prisma:generate`
+  - `prisma validate` con `DATABASE_URL` dummy
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm test -w apps/api`
+  - `npm run build`
+  - `npm audit --omit=dev --cache .npm-cache --strict-ssl false`
+- Pendientes:
+  - Ejecutar migraciones contra MySQL real.
+  - Ejecutar seed para actualizar permisos.
+  - Probar ciclo real: crear plan, asignar cliente, registrar consumo, renovar y revisar excedentes.
+
+## Etapa 12 - Dispensers, comodatos y mantenimiento
+
+- Fecha: 2026-08-09
+- Estado: completada tecnicamente, pendiente de prueba funcional con MySQL real.
+- Funcionalidades:
+  - Modelos de dispenser.
+  - Equipos con numero de serie unico por tenant.
+  - Estado actual del equipo: disponible, en comodato, mantenimiento o retirado.
+  - Cliente actual del equipo.
+  - Comodatos activos y devueltos.
+  - Entrega de dispenser a cliente con movimiento historico.
+  - Retiro de dispenser con liberacion del equipo y movimiento historico.
+  - Mantenimientos, reparaciones y limpiezas.
+  - Finalizacion de mantenimiento con costo y resultado.
+  - Historial por dispenser con comodatos, movimientos y mantenimientos.
+  - Panel web basico para crear modelo, crear equipo, entregar y retirar.
+- Migraciones:
+  - `apps/api/prisma/migrations/20260809235500_stage_12_13_dispensers_reports/migration.sql`
+- Endpoints:
+  - `/api/v1/dispensers/models`
+  - `/api/v1/dispensers`
+  - `/api/v1/dispensers/:id/history`
+  - `/api/v1/dispensers/comodatos/list`
+  - `/api/v1/dispensers/comodatos`
+  - `/api/v1/dispensers/comodatos/:id/retire`
+  - `/api/v1/dispensers/maintenance`
+  - `/api/v1/dispensers/maintenance/:id/complete`
+- Decisiones:
+  - La ubicacion actual queda denormalizada en `dispensers.current_customer_id` para consultas rapidas.
+  - La trazabilidad queda en `dispenser_movements`, `dispenser_comodatos` y `dispenser_maintenances`.
+  - Entrega y retiro se ejecutan en transaccion para mantener estado e historial consistentes.
+- Pruebas ejecutadas:
+  - `npm run prisma:generate`
+  - `prisma validate` con `DATABASE_URL` dummy
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm test -w apps/api`
+  - `npm run build`
+  - `npm audit --omit=dev --cache .npm-cache --strict-ssl false`
+- Pendientes:
+  - Ejecutar migraciones contra MySQL real.
+  - Ejecutar seed para actualizar permisos.
+  - Probar flujo real: modelo, equipo, entrega, mantenimiento, retiro e historial.
+
+## Etapa 13 - Dashboard, KPIs e informes
+
+- Fecha: 2026-08-09
+- Estado: completada tecnicamente, pendiente de prueba funcional con MySQL real.
+- Funcionalidades:
+  - Endpoint de KPIs calculado desde datos transaccionales.
+  - Ventas por facturas.
+  - Cobranzas por pagos aplicados.
+  - Deuda por saldo de facturas pendientes.
+  - Clientes totales y activos.
+  - Rutas y paradas entregadas.
+  - Productos activos y top productos facturados.
+  - Saldo total de envases en clientes.
+  - Estado agregado de dispensers.
+  - Litros entregados calculados desde items entregados con unidad compatible.
+  - Exportacion CSV de indicadores.
+  - Panel web basico de KPIs.
+- Migraciones:
+  - `apps/api/prisma/migrations/20260809235500_stage_12_13_dispensers_reports/migration.sql`
+- Endpoints:
+  - `/api/v1/reports/kpis`
+  - `/api/v1/reports/export`
+- Decisiones:
+  - No se agrego Redis; los indicadores se calculan on-demand para evitar cache prematuro.
+  - Los KPIs no persisten agregados, por lo que deben coincidir con las tablas transaccionales.
+  - La exportacion devuelve CSV como contenido para mantener el endpoint simple en esta etapa.
+- Pruebas ejecutadas:
+  - `npm run prisma:generate`
+  - `prisma validate` con `DATABASE_URL` dummy
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm test -w apps/api`
+  - `npm run build`
+  - `npm audit --omit=dev --cache .npm-cache --strict-ssl false`
+- Pendientes:
+  - Ejecutar migraciones contra MySQL real.
+  - Ejecutar seed para actualizar permisos.
+  - Validar indicadores contra datos reales luego de crear transacciones de prueba.
+  - Refinar definicion de litros si se cargan unidades distintas a `litro`.
+
+## Etapa 14 - Alertas y notificaciones
+
+- Fecha: 2026-08-10
+- Estado: completada tecnicamente, pendiente de prueba funcional con MySQL real.
+- Funcionalidades:
+  - Reglas de alerta configurables.
+  - Alertas manuales.
+  - Escaneo de facturas vencidas.
+  - Escaneo de clientes inactivos segun dias sin pedidos.
+  - Escaneo de abonos proximos a renovar.
+  - Escaneo de mantenimientos de dispensers vencidos.
+  - Cola de notificaciones por canal.
+  - Despacho finito de notificaciones sin procesos residentes.
+  - Registro de tareas programables para scan/dispatch.
+  - Panel web basico para crear regla, escanear y despachar.
+- Migraciones:
+  - `apps/api/prisma/migrations/20260810001500_stage_14_15_alerts_integrations/migration.sql`
+- Endpoints:
+  - `/api/v1/alerts/rules`
+  - `/api/v1/alerts`
+  - `/api/v1/alerts/:id/acknowledge`
+  - `/api/v1/alerts/:id/resolve`
+  - `/api/v1/alerts/scan`
+  - `/api/v1/alerts/notifications/list`
+  - `/api/v1/alerts/notifications/dispatch`
+- Decisiones:
+  - No se agrego Redis/BullMQ todavia para no obligar infraestructura adicional.
+  - El scan y dispatch quedan como endpoints finitos que luego pueden ejecutarse por cron, worker o BullMQ.
+  - Email, WhatsApp y push quedan preparados por canal; si no hay proveedor activo se marcan como `SKIPPED`.
+- Pruebas ejecutadas:
+  - `npm run prisma:generate`
+  - `prisma validate` con `DATABASE_URL` dummy
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm test -w apps/api`
+  - `npm run build`
+  - `npm audit --omit=dev --cache .npm-cache --strict-ssl false`
+- Pendientes:
+  - Ejecutar migraciones contra MySQL real.
+  - Ejecutar seed para actualizar permisos.
+  - Probar alertas con facturas vencidas, clientes sin pedidos, abonos y mantenimientos reales.
+  - Definir proveedor real de email/WhatsApp/push si se decide activar envio externo.
+
+## Etapa 15 - Integraciones externas y escalabilidad
+
+- Fecha: 2026-08-10
+- Estado: completada tecnicamente como capa base, pendiente de integraciones reales con credenciales.
+- Funcionalidades:
+  - Configuracion de integraciones externas por tenant.
+  - Proveedores preparados: ARCA, Mercado Pago, WhatsApp Business, Google Maps, optimizacion de rutas, S3, Cloudflare R2, MinIO, webhooks y API publica.
+  - Webhook endpoints configurables.
+  - Cola de eventos de integracion.
+  - Procesamiento finito de eventos sin llamadas externas.
+  - API keys publicas con hash y token visible solo al crear.
+  - Revocacion de API keys.
+  - Panel web basico para activar webhook, crear endpoint y crear API key.
+- Migraciones:
+  - `apps/api/prisma/migrations/20260810001500_stage_14_15_alerts_integrations/migration.sql`
+- Endpoints:
+  - `/api/v1/integrations`
+  - `/api/v1/integrations/webhooks`
+  - `/api/v1/integrations/events`
+  - `/api/v1/integrations/events/process`
+  - `/api/v1/integrations/api-keys`
+  - `/api/v1/integrations/api-keys/:id/revoke`
+- Decisiones:
+  - No se implementaron llamadas reales a ARCA, Mercado Pago, WhatsApp, Google Maps ni storage externo.
+  - Las credenciales se guardan como JSON preparatorio; antes de produccion real conviene cifrado por tenant/KMS.
+  - Los eventos quedan persistidos para permitir reintentos, trazabilidad y futura salida por workers.
+- Pruebas ejecutadas:
+  - `npm run prisma:generate`
+  - `prisma validate` con `DATABASE_URL` dummy
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm test -w apps/api`
+  - `npm run build`
+  - `npm audit --omit=dev --cache .npm-cache --strict-ssl false`
+- Pendientes:
+  - Ejecutar migraciones contra MySQL real.
+  - Ejecutar seed para actualizar permisos.
+  - Definir integraciones reales una por una con credenciales, entornos sandbox y contratos.
+  - Endurecer cifrado de credenciales antes de usar servicios externos en produccion.
