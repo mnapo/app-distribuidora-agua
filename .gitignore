@@ -8,7 +8,10 @@ coverage/
 .env
 .env.*
 !.env.example
-storage/
+/storage/
+apps/api/storage/
+!apps/api/src/storage/
+!apps/api/src/storage/**
 *.log
 *.tsbuildinfo
 npm-debug.log*

@@ -4,7 +4,7 @@ setlocal enabledelayedexpansion
 REM Deploy de AguaDistri en Docker Desktop / Windows.
 REM Usa este script cuando MySQL ya existe fuera de este docker-compose.
 
-if "%APP_DIR%"=="" set "APP_DIR=C:\Proyectos\AguaDistri"
+if "%APP_DIR%"=="" set "APP_DIR=%~dp0"
 if "%ENV_FILE%"=="" set "ENV_FILE=%APP_DIR%\.env"
 if "%COMPOSE_FILE%"=="" set "COMPOSE_FILE=%APP_DIR%\docker-compose.prod.yml"
 if "%PROJECT_NAME%"=="" set "PROJECT_NAME=agua-distri"
