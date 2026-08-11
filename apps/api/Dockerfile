@@ -1,13 +1,19 @@
-FROM node:20-alpine AS deps
+FROM node:20-bookworm-slim AS deps
 WORKDIR /app
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json* ./
 COPY tsconfig.base.json ./
 COPY apps/api/package.json ./apps/api/package.json
 RUN npm install --workspace apps/api --include-workspace-root && mkdir -p apps/api/node_modules
 
-FROM node:20-alpine AS build
+FROM node:20-bookworm-slim AS build
 WORKDIR /app
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
@@ -16,9 +22,12 @@ COPY apps/api ./apps/api
 RUN npm run prisma:generate -w apps/api
 RUN npm run build -w apps/api
 
-FROM node:20-alpine AS runner
+FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/node_modules ./node_modules

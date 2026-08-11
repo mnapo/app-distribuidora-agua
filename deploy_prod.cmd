@@ -23,6 +23,33 @@ if not exist "%ENV_FILE%" (
   exit /b 1
 )
 
+for /f "usebackq tokens=1,* delims==" %%A in ("%ENV_FILE%") do (
+  if /i "%%A"=="DATABASE_URL" set "DATABASE_URL_VALUE=%%~B"
+)
+
+if "%DATABASE_URL_VALUE%"=="" (
+  echo ERROR: DATABASE_URL no esta definido en %ENV_FILE%
+  exit /b 1
+)
+
+echo %DATABASE_URL_VALUE% | findstr /i "@localhost:" >nul
+if not errorlevel 1 (
+  echo ERROR: DATABASE_URL apunta a localhost.
+  echo Dentro del contenedor localhost es el propio contenedor, no el MySQL del host Windows.
+  echo Para Docker Desktop usa algo como:
+  echo   DATABASE_URL="mysql://usuario:password@host.docker.internal:3306/agua_distri"
+  exit /b 1
+)
+
+echo %DATABASE_URL_VALUE% | findstr /i "@127.0.0.1:" >nul
+if not errorlevel 1 (
+  echo ERROR: DATABASE_URL apunta a 127.0.0.1.
+  echo Dentro del contenedor 127.0.0.1 es el propio contenedor, no el MySQL del host Windows.
+  echo Para Docker Desktop usa algo como:
+  echo   DATABASE_URL="mysql://usuario:password@host.docker.internal:3306/agua_distri"
+  exit /b 1
+)
+
 set "ENV_FILE=%ENV_FILE%"
 
 echo ==^> Git pull...
