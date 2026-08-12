@@ -239,6 +239,15 @@ export function Dashboard({
     description: '',
     permissionCodes: [] as string[]
   });
+  const [tenantForm, setTenantForm] = useState({
+    name: '',
+    slug: '',
+    status: 'ACTIVE',
+    adminEmail: '',
+    adminPassword: 'Admin123!',
+    adminFirstName: 'Admin',
+    adminLastName: ''
+  });
   const [priceListForm, setPriceListForm] = useState({ name: '', isDefault: false });
   const [priceListItemForm, setPriceListItemForm] = useState({
     priceListId: '',
@@ -253,6 +262,8 @@ export function Dashboard({
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
+  const [editingTenantId, setEditingTenantId] = useState<string | null>(null);
+  const [editingTenantHasAdmin, setEditingTenantHasAdmin] = useState(false);
   const [editingPriceListId, setEditingPriceListId] = useState<string | null>(null);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
@@ -508,6 +519,50 @@ export function Dashboard({
     }
     setCategoryForm({ name: '' });
     setEditingCategoryId(null);
+  }
+
+  async function saveTenant() {
+    if (editingTenantId) {
+      await patch<Tenant>(`/tenants/${editingTenantId}`, {
+        name: tenantForm.name,
+        slug: tenantForm.slug,
+        status: tenantForm.status,
+        adminEmail: tenantForm.adminEmail || undefined,
+        adminPassword: tenantForm.adminPassword || undefined,
+        adminFirstName: tenantForm.adminFirstName || undefined,
+        adminLastName: tenantForm.adminLastName || undefined
+      });
+    } else {
+      await post<Tenant>('/tenants', {
+        name: tenantForm.name,
+        slug: tenantForm.slug,
+        adminEmail: tenantForm.adminEmail,
+        adminPassword: tenantForm.adminPassword,
+        adminFirstName: tenantForm.adminFirstName,
+        adminLastName: tenantForm.adminLastName
+      });
+    }
+    resetTenantForm();
+  }
+
+  function resetTenantForm() {
+    setTenantForm({ name: '', slug: '', status: 'ACTIVE', adminEmail: '', adminPassword: 'Admin123!', adminFirstName: 'Admin', adminLastName: '' });
+    setEditingTenantId(null);
+    setEditingTenantHasAdmin(false);
+  }
+
+  function editTenant(tenant: Tenant) {
+    setEditingTenantId(tenant.id);
+    setEditingTenantHasAdmin(Boolean(tenant.adminUser));
+    setTenantForm({
+      name: tenant.name,
+      slug: tenant.slug,
+      status: tenant.status,
+      adminEmail: tenant.adminUser?.email ?? '',
+      adminPassword: '',
+      adminFirstName: tenant.adminUser?.firstName ?? '',
+      adminLastName: tenant.adminUser?.lastName ?? ''
+    });
   }
 
   async function createProduct() {
@@ -925,12 +980,117 @@ export function Dashboard({
   function renderActiveModule() {
     if (session.user.isPlatformAdmin) {
       return (
-        <Panel title="Tenants" icon={<Building2 size={18} />}>
-          <Table
-            headers={['Nombre', 'Slug', 'Estado']}
-            rows={data.tenants.map((tenant) => [tenant.name, tenant.slug, tenant.status])}
-          />
-        </Panel>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,420px)_1fr]">
+          <Panel title={editingTenantId ? 'Editar distribuidora' : 'Nueva distribuidora'} icon={<Building2 size={18} />}>
+            <form onSubmit={(event) => submitForm(event, saveTenant)} className="grid gap-4">
+              <Field
+                label="Nombre"
+                value={tenantForm.name}
+                onChange={(value) => {
+                  const nextSlug = slugFromName(value);
+                  setTenantForm({
+                    ...tenantForm,
+                    name: value,
+                    slug: editingTenantId || tenantForm.slug ? tenantForm.slug : nextSlug,
+                    adminEmail: !editingTenantId && !tenantForm.adminEmail ? adminEmailFromSlug(nextSlug) : tenantForm.adminEmail,
+                    adminLastName: !editingTenantId && !tenantForm.adminLastName ? value : tenantForm.adminLastName
+                  });
+                }}
+                required
+              />
+              <Field
+                label="Slug"
+                value={tenantForm.slug}
+                onChange={(value) => {
+                  const nextSlug = slugFromName(value);
+                  setTenantForm({
+                    ...tenantForm,
+                    slug: nextSlug,
+                    adminEmail: !editingTenantId && !tenantForm.adminEmail ? adminEmailFromSlug(nextSlug) : tenantForm.adminEmail
+                  });
+                }}
+                placeholder="distribuidora-oeste"
+                required={!editingTenantId}
+              />
+              <div className="grid gap-3 border-t border-border pt-4">
+                <p className="text-sm font-semibold text-slate-700">{editingTenantId ? 'Administrador' : 'Administrador inicial'}</p>
+                <Field
+                  label="Email administrador"
+                  type="email"
+                  value={tenantForm.adminEmail}
+                  onChange={(value) => setTenantForm({ ...tenantForm, adminEmail: value })}
+                  placeholder={adminEmailFromSlug(tenantForm.slug)}
+                  required
+                />
+                <Field
+                  label={editingTenantId ? 'Nuevo password' : 'Password inicial'}
+                  type="password"
+                  value={tenantForm.adminPassword}
+                  onChange={(value) => setTenantForm({ ...tenantForm, adminPassword: value })}
+                  placeholder={editingTenantId ? 'Completar solo para cambiar' : undefined}
+                  required={!editingTenantId || !editingTenantHasAdmin}
+                />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field
+                    label="Nombre"
+                    value={tenantForm.adminFirstName}
+                    onChange={(value) => setTenantForm({ ...tenantForm, adminFirstName: value })}
+                    required
+                  />
+                  <Field
+                    label="Apellido"
+                    value={tenantForm.adminLastName}
+                    onChange={(value) => setTenantForm({ ...tenantForm, adminLastName: value })}
+                    required
+                  />
+                </div>
+              </div>
+              {editingTenantId ? (
+                <Select
+                  label="Estado"
+                  value={tenantForm.status}
+                  onChange={(value) => setTenantForm({ ...tenantForm, status: value })}
+                  options={[
+                    ['ACTIVE', 'Activa'],
+                    ['SUSPENDED', 'Suspendida'],
+                    ['INACTIVE', 'Inactiva']
+                  ]}
+                  required
+                />
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <PrimaryButton>{editingTenantId ? 'Actualizar distribuidora' : 'Guardar distribuidora'}</PrimaryButton>
+                {editingTenantId ? (
+                  <button
+                    type="button"
+                    onClick={resetTenantForm}
+                    className="h-10 border border-border bg-white px-4 text-sm font-semibold hover:border-primary"
+                  >
+                    Cancelar
+                  </button>
+                ) : null}
+              </div>
+            </form>
+          </Panel>
+          <Panel title="Distribuidoras" icon={<FileText size={18} />}>
+            <Table
+              headers={['Nombre', 'Slug', 'Admin', 'Estado', 'Acciones']}
+              rows={data.tenants.map((tenant) => [
+                tenant.name,
+                tenant.slug,
+                tenant.adminUser?.email ?? 'Sin admin',
+                tenantStatusLabel(tenant.status),
+                <ActionButtons
+                  key={tenant.id}
+                  onEdit={() => editTenant(tenant)}
+                  onDeactivate={() => void deactivate(`/tenants/${tenant.id}`, { status: tenant.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE' })}
+                  disabled={tenant.status === 'INACTIVE'}
+                  deactivateLabel={tenant.status === 'ACTIVE' ? 'Suspender' : 'Activar'}
+                />
+              ])}
+            />
+          </Panel>
+        </div>
       );
     }
 
@@ -1680,6 +1840,29 @@ function customerName(customer: Customer): string {
   return customer.businessName ?? (`${customer.firstName ?? ''} ${customer.lastName ?? ''}`.trim() || 'Sin nombre');
 }
 
+function slugFromName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+function adminEmailFromSlug(slug: string): string {
+  return slug ? `admin@${slug}.local` : '';
+}
+
+function tenantStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    ACTIVE: 'Activa',
+    SUSPENDED: 'Suspendida',
+    INACTIVE: 'Inactiva'
+  };
+  return labels[status] ?? status;
+}
+
 function orderReference(order?: Order | null): string {
   return order ? `Pedido #${order.id.slice(-8)}` : 'Sin pedido';
 }
@@ -1871,11 +2054,13 @@ function PrimaryButton({ children }: { children: React.ReactNode }) {
 function ActionButtons({
   onEdit,
   onDeactivate,
-  disabled = false
+  disabled = false,
+  deactivateLabel = 'Desactivar'
 }: {
   onEdit: () => void;
   onDeactivate?: () => void;
   disabled?: boolean;
+  deactivateLabel?: string;
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -1889,7 +2074,7 @@ function ActionButtons({
           disabled={disabled}
           className="border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:border-red-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Desactivar
+          {deactivateLabel}
         </button>
       ) : null}
     </div>

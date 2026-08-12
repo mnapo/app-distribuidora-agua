@@ -235,6 +235,23 @@ async function seedTenant(input: {
       roleId: adminRole.id
     }
   });
+
+  await prisma.driver.upsert({
+    where: { userId: adminUser.id },
+    update: {
+      tenantId: tenant.id,
+      status: 'ACTIVE',
+      licenseNumber: `${input.slug.toUpperCase()}-001`,
+      licenseCategory: 'B'
+    },
+    create: {
+      tenantId: tenant.id,
+      userId: adminUser.id,
+      status: 'ACTIVE',
+      licenseNumber: `${input.slug.toUpperCase()}-001`,
+      licenseCategory: 'B'
+    }
+  });
 }
 
 main()

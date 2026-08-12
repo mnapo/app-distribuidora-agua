@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException, Inject} from '@nestjs/common';
+import { hash } from 'bcryptjs';
 import { CreateTenantDto } from './dto/create-tenant.dto.js';
 import { UpdateTenantDto } from './dto/update-tenant.dto.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -13,24 +14,101 @@ export class TenantsService {
   ) {}
 
   async findAll() {
-    return this.prisma.tenant.findMany({
+    const tenants = await this.prisma.tenant.findMany({
       orderBy: { name: 'asc' },
-      include: { settings: true }
+      include: {
+        settings: true,
+        users: {
+          where: {
+            userRoles: {
+              some: {
+                role: {
+                  name: 'Administrador'
+                }
+              }
+            }
+          },
+          orderBy: { createdAt: 'asc' },
+          take: 1,
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            status: true
+          }
+        }
+      }
     });
+
+    return tenants.map(({ users, ...tenant }) => ({
+      ...tenant,
+      adminUser: users[0] ?? null
+    }));
   }
 
   async create(dto: CreateTenantDto, actor: AuthenticatedUser) {
     this.assertPlatformAdmin(actor);
 
-    const tenant = await this.prisma.tenant.create({
-      data: {
-        name: dto.name.trim(),
-        slug: dto.slug.trim(),
-        settings: {
-          create: {}
+    const tenant = await this.prisma.$transaction(async (tx) => {
+      const nextTenant = await tx.tenant.create({
+        data: {
+          name: dto.name.trim(),
+          slug: dto.slug.trim(),
+          settings: {
+            create: {}
+          }
+        },
+        include: { settings: true }
+      });
+
+      const adminRole = await tx.role.create({
+        data: {
+          tenantId: nextTenant.id,
+          name: 'Administrador',
+          description: 'Rol administrador inicial',
+          isSystem: true
         }
-      },
-      include: { settings: true }
+      });
+
+      const permissions = await tx.permission.findMany({
+        where: {
+          code: {
+            not: {
+              startsWith: 'platform.'
+            }
+          }
+        },
+        select: { id: true }
+      });
+
+      if (permissions.length > 0) {
+        await tx.rolePermission.createMany({
+          data: permissions.map((permission) => ({
+            roleId: adminRole.id,
+            permissionId: permission.id
+          })),
+          skipDuplicates: true
+        });
+      }
+
+      const passwordHash = await hash(dto.adminPassword, 12);
+      await tx.user.create({
+        data: {
+          tenantId: nextTenant.id,
+          email: dto.adminEmail.toLowerCase().trim(),
+          passwordHash,
+          firstName: dto.adminFirstName.trim(),
+          lastName: dto.adminLastName.trim(),
+          userRoles: {
+            create: {
+              roleId: adminRole.id
+            }
+          }
+        }
+      });
+
+      return nextTenant;
     });
 
     await this.audit.log({
@@ -39,7 +117,7 @@ export class TenantsService {
       action: 'tenants.create',
       entity: 'Tenant',
       entityId: tenant.id,
-      newValues: { name: tenant.name, slug: tenant.slug, status: tenant.status }
+      newValues: { name: tenant.name, slug: tenant.slug, status: tenant.status, adminEmail: dto.adminEmail.toLowerCase().trim() }
     });
 
     return tenant;
@@ -53,13 +131,75 @@ export class TenantsService {
       throw new NotFoundException('Tenant not found');
     }
 
-    const tenant = await this.prisma.tenant.update({
-      where: { id },
-      data: {
-        name: dto.name?.trim(),
-        status: dto.status
-      },
-      include: { settings: true }
+    const tenant = await this.prisma.$transaction(async (tx) => {
+      const updatedTenant = await tx.tenant.update({
+        where: { id },
+        data: {
+          name: dto.name?.trim(),
+          slug: dto.slug?.trim(),
+          status: dto.status
+        },
+        include: { settings: true }
+      });
+
+      if (this.hasAdminUpdate(dto)) {
+        const adminRole = await tx.role.findFirst({
+          where: {
+            tenantId: id,
+            name: 'Administrador'
+          }
+        }) ?? await tx.role.create({
+          data: {
+            tenantId: id,
+            name: 'Administrador',
+            description: 'Rol administrador inicial',
+            isSystem: true
+          }
+        });
+
+        await this.ensureRolePermissions(tx, adminRole.id);
+
+        const adminUser = await tx.user.findFirst({
+          where: {
+            tenantId: id,
+            userRoles: {
+              some: {
+                roleId: adminRole.id
+              }
+            }
+          },
+          orderBy: { createdAt: 'asc' }
+        });
+
+        if (adminUser) {
+          await tx.user.update({
+            where: { id: adminUser.id },
+            data: {
+              email: dto.adminEmail?.toLowerCase().trim(),
+              firstName: dto.adminFirstName?.trim(),
+              lastName: dto.adminLastName?.trim(),
+              passwordHash: dto.adminPassword ? await hash(dto.adminPassword, 12) : undefined
+            }
+          });
+        } else {
+          await tx.user.create({
+            data: {
+              tenantId: id,
+              email: this.requiredAdminField(dto.adminEmail, 'adminEmail').toLowerCase().trim(),
+              passwordHash: await hash(this.requiredAdminField(dto.adminPassword, 'adminPassword'), 12),
+              firstName: this.requiredAdminField(dto.adminFirstName, 'adminFirstName').trim(),
+              lastName: this.requiredAdminField(dto.adminLastName, 'adminLastName').trim(),
+              userRoles: {
+                create: {
+                  roleId: adminRole.id
+                }
+              }
+            }
+          });
+        }
+      }
+
+      return updatedTenant;
     });
 
     await this.audit.log({
@@ -68,11 +208,53 @@ export class TenantsService {
       action: 'tenants.update',
       entity: 'Tenant',
       entityId: tenant.id,
-      oldValues: { name: current.name, status: current.status },
-      newValues: { name: tenant.name, status: tenant.status }
+      oldValues: { name: current.name, slug: current.slug, status: current.status },
+      newValues: {
+        name: tenant.name,
+        slug: tenant.slug,
+        status: tenant.status,
+        adminEmail: dto.adminEmail?.toLowerCase().trim()
+      }
     });
 
     return tenant;
+  }
+
+  private hasAdminUpdate(dto: UpdateTenantDto): boolean {
+    return Boolean(dto.adminEmail || dto.adminPassword || dto.adminFirstName || dto.adminLastName);
+  }
+
+  private async ensureRolePermissions(
+    tx: Parameters<Parameters<PrismaService['$transaction']>[0]>[0],
+    roleId: string
+  ): Promise<void> {
+    const permissions = await tx.permission.findMany({
+      where: {
+        code: {
+          not: {
+            startsWith: 'platform.'
+          }
+        }
+      },
+      select: { id: true }
+    });
+
+    if (permissions.length === 0) return;
+
+    await tx.rolePermission.createMany({
+      data: permissions.map((permission) => ({
+        roleId,
+        permissionId: permission.id
+      })),
+      skipDuplicates: true
+    });
+  }
+
+  private requiredAdminField(value: string | undefined, field: string): string {
+    if (!value) {
+      throw new ForbiddenException(`${field} is required to create administrator user`);
+    }
+    return value;
   }
 
   private assertPlatformAdmin(user: AuthenticatedUser): void {

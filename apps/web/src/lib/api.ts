@@ -32,6 +32,13 @@ export type Tenant = {
   name: string;
   slug: string;
   status: string;
+  adminUser?: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    status: string;
+  } | null;
 };
 
 export type User = {

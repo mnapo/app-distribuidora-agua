@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SaveFileInput, StoredFile, StorageProvider } from './storage.types.js';
 
@@ -9,7 +9,7 @@ import { SaveFileInput, StoredFile, StorageProvider } from './storage.types.js';
 export class LocalStorageProvider implements StorageProvider {
   private readonly rootPath: string;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(@Inject(ConfigService) private readonly config: ConfigService) {
     this.rootPath = path.resolve(this.config.get<string>('LOCAL_STORAGE_ROOT', './storage'));
   }
 
