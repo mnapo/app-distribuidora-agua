@@ -61,7 +61,17 @@ export class CustomersService {
     await this.assertPriceList(dto.priceListId, tenantId);
     const customer = await this.prisma.customer.update({
       where: { id },
-      data: this.cleanUpdate(dto),
+      data: {
+        ...this.cleanUpdate(dto),
+        ...(dto.addresses
+          ? {
+              addresses: {
+                deleteMany: {},
+                create: dto.addresses.map((address) => ({ ...address, tenantId }))
+              }
+            }
+          : {})
+      },
       include: { addresses: true, priceList: true }
     });
     await this.audit.log({ tenantId, userId: user.id, action: 'customers.update', entity: 'Customer', entityId: id, oldValues: { status: current.status }, newValues: { status: customer.status } });

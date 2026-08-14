@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Post, Query, UseGuards, Inject} from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards, Inject} from '@nestjs/common';
 import { ContainersService } from './containers.service.js';
 import { CreateContainerMovementDto } from './dto/create-container-movement.dto.js';
 import { CreateContainerTypeDto } from './dto/create-container-type.dto.js';
 import { ContainersQueryDto } from './dto/containers-query.dto.js';
+import { UpdateContainerTypeDto } from './dto/update-container-type.dto.js';
 import { AuthenticatedUser } from '../common/authenticated-user.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { Permissions } from '../common/decorators/permissions.decorator.js';
@@ -24,6 +25,12 @@ export class ContainersController {
   @Post('types')
   createType(@Body() dto: CreateContainerTypeDto, @CurrentUser() user: AuthenticatedUser) {
     return this.containers.createType(dto, user);
+  }
+
+  @Permissions('containers.create')
+  @Patch('types/:id')
+  updateType(@Param('id') id: string, @Body() dto: UpdateContainerTypeDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.containers.updateType(id, dto, user);
   }
 
   @Permissions('containers.view')

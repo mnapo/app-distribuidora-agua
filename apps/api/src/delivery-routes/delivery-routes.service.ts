@@ -82,7 +82,7 @@ export class DeliveryRoutesService {
 
   async update(id: string, dto: UpdateDeliveryRouteDto, user: AuthenticatedUser) {
     const tenantId = requireTenant(user);
-    const current = await this.prisma.deliveryRoute.findFirst({ where: { id, tenantId }, include: { orders: true } });
+    const current = await this.prisma.deliveryRoute.findFirst({ where: { id, tenantId }, include: { orders: { include: { order: true } } } });
     if (!current) throw new NotFoundException('Delivery route not found');
     if (current.status !== 'DRAFT') throw new BadRequestException('Only draft routes can be modified');
 
@@ -98,7 +98,25 @@ export class DeliveryRoutesService {
     }
 
     const route = await this.prisma.$transaction(async (tx) => {
-      if (dto.orders) await tx.deliveryRouteOrder.deleteMany({ where: { routeId: id } });
+      if (dto.orders) {
+        const nextOrderIds = new Set(dto.orders.map((item) => item.orderId));
+        const removedOrders = current.orders.filter((routeOrder) => !nextOrderIds.has(routeOrder.orderId));
+
+        for (const routeOrder of removedOrders) {
+          await tx.order.update({
+            where: { id: routeOrder.orderId },
+            data: {
+              status: 'CONFIRMED',
+              assignedDriverId: null,
+              assignedVehicleId: null,
+              assignedAt: null
+            }
+          });
+          await this.addOrderHistory(tx, tenantId, routeOrder.orderId, user.id, routeOrder.order.status, 'CONFIRMED', 'delivery_routes.update', dto.notes);
+        }
+
+        await tx.deliveryRouteOrder.deleteMany({ where: { routeId: id } });
+      }
       const updated = await tx.deliveryRoute.update({
         where: { id },
         data: {

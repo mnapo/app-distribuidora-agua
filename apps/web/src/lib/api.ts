@@ -237,7 +237,19 @@ export type ContainerType = {
   id: string;
   name: string;
   code: string | null;
+  capacity?: string | number | null;
   active: boolean;
+};
+
+export type ContainerMovement = {
+  id: string;
+  type: string;
+  quantity: number;
+  reference: string | null;
+  notes: string | null;
+  createdAt: string;
+  customer: Customer;
+  containerType: ContainerType;
 };
 
 export type ContainerBalance = {
@@ -318,6 +330,7 @@ export type DispenserModel = {
   id: string;
   name: string;
   code: string | null;
+  capacity?: string | number | null;
   active: boolean;
 };
 
@@ -334,6 +347,7 @@ export type DispenserComodato = {
   status: string;
   deliveredAt: string;
   returnedAt: string | null;
+  depositAmount?: string | number | null;
   customer: Customer;
   dispenser: Dispenser;
 };

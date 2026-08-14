@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards, Inject} from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards, Inject} from '@nestjs/common';
 import { CompleteDispenserMaintenanceDto } from './dto/complete-dispenser-maintenance.dto.js';
 import { CreateDispenserComodatoDto } from './dto/create-dispenser-comodato.dto.js';
 import { CreateDispenserMaintenanceDto } from './dto/create-dispenser-maintenance.dto.js';
@@ -6,6 +6,8 @@ import { CreateDispenserModelDto } from './dto/create-dispenser-model.dto.js';
 import { CreateDispenserDto } from './dto/create-dispenser.dto.js';
 import { DispensersQueryDto } from './dto/dispensers-query.dto.js';
 import { RetireDispenserComodatoDto } from './dto/retire-dispenser-comodato.dto.js';
+import { UpdateDispenserDto } from './dto/update-dispenser.dto.js';
+import { UpdateDispenserModelDto } from './dto/update-dispenser-model.dto.js';
 import { DispensersService } from './dispensers.service.js';
 import { AuthenticatedUser } from '../common/authenticated-user.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
@@ -30,6 +32,12 @@ export class DispensersController {
     return this.dispensers.createModel(dto, user);
   }
 
+  @Permissions('dispensers.update')
+  @Patch('models/:id')
+  updateModel(@Param('id') id: string, @Body() dto: UpdateDispenserModelDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.dispensers.updateModel(id, dto, user);
+  }
+
   @Permissions('dispensers.view')
   @Get()
   findAll(@Query() query: DispensersQueryDto, @CurrentUser() user: AuthenticatedUser) {
@@ -40,12 +48,6 @@ export class DispensersController {
   @Post()
   create(@Body() dto: CreateDispenserDto, @CurrentUser() user: AuthenticatedUser) {
     return this.dispensers.create(dto, user);
-  }
-
-  @Permissions('dispensers.view')
-  @Get(':id/history')
-  history(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.dispensers.history(id, user);
   }
 
   @Permissions('dispensers.view')
@@ -64,6 +66,18 @@ export class DispensersController {
   @Post('comodatos/:id/retire')
   retireComodato(@Param('id') id: string, @Body() dto: RetireDispenserComodatoDto, @CurrentUser() user: AuthenticatedUser) {
     return this.dispensers.retireComodato(id, dto, user);
+  }
+
+  @Permissions('dispensers.update')
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateDispenserDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.dispensers.update(id, dto, user);
+  }
+
+  @Permissions('dispensers.view')
+  @Get(':id/history')
+  history(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.dispensers.history(id, user);
   }
 
   @Permissions('dispensers.maintenance')

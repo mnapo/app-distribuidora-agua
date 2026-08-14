@@ -7,6 +7,8 @@ import { CreateDispenserModelDto } from './dto/create-dispenser-model.dto.js';
 import { CreateDispenserDto } from './dto/create-dispenser.dto.js';
 import { DispensersQueryDto } from './dto/dispensers-query.dto.js';
 import { RetireDispenserComodatoDto } from './dto/retire-dispenser-comodato.dto.js';
+import { UpdateDispenserDto } from './dto/update-dispenser.dto.js';
+import { UpdateDispenserModelDto } from './dto/update-dispenser-model.dto.js';
 import { pageArgs } from '../commercial/dto/list-query.dto.js';
 import { requireTenant } from '../commercial/tenant-scope.js';
 import { AuthenticatedUser } from '../common/authenticated-user.js';
@@ -33,6 +35,23 @@ export class DispensersService {
       data: { tenantId, name: dto.name.trim(), code: dto.code?.trim(), capacity: dto.capacity, active: dto.active }
     });
     await this.audit.log({ tenantId, userId: user.id, action: 'dispensers.models.create', entity: 'DispenserModel', entityId: model.id, newValues: { name: model.name } });
+    return model;
+  }
+
+  async updateModel(id: string, dto: UpdateDispenserModelDto, user: AuthenticatedUser) {
+    const tenantId = requireTenant(user);
+    const current = await this.prisma.dispenserModel.findFirst({ where: { id, tenantId } });
+    if (!current) throw new ForbiddenException('Dispenser model does not belong to this tenant');
+    const model = await this.prisma.dispenserModel.update({
+      where: { id },
+      data: {
+        name: dto.name?.trim(),
+        code: dto.code?.trim(),
+        capacity: dto.capacity,
+        active: dto.active
+      }
+    });
+    await this.audit.log({ tenantId, userId: user.id, action: 'dispensers.models.update', entity: 'DispenserModel', entityId: id, oldValues: { active: current.active }, newValues: { active: model.active, name: model.name } });
     return model;
   }
 
@@ -67,6 +86,29 @@ export class DispensersService {
       include: { model: true }
     });
     await this.audit.log({ tenantId, userId: user.id, action: 'dispensers.create', entity: 'Dispenser', entityId: dispenser.id, newValues: { serialNumber: dispenser.serialNumber } });
+    return dispenser;
+  }
+
+  async update(id: string, dto: UpdateDispenserDto, user: AuthenticatedUser) {
+    const tenantId = requireTenant(user);
+    const current = await this.prisma.dispenser.findFirst({ where: { id, tenantId }, include: { comodatos: true } });
+    if (!current) throw new ForbiddenException('Dispenser does not belong to this tenant');
+    if (dto.modelId) await this.assertModel(dto.modelId, tenantId);
+    if (dto.status === 'RETIRED' && current.comodatos.some((comodato) => comodato.status === 'ACTIVE')) {
+      throw new BadRequestException('Dispenser with active comodato cannot be retired');
+    }
+    const dispenser = await this.prisma.dispenser.update({
+      where: { id },
+      data: {
+        modelId: dto.modelId,
+        serialNumber: dto.serialNumber?.trim(),
+        acquiredAt: dto.acquiredAt ? new Date(dto.acquiredAt) : undefined,
+        notes: dto.notes?.trim(),
+        status: dto.status
+      },
+      include: { model: true, currentCustomer: true }
+    });
+    await this.audit.log({ tenantId, userId: user.id, action: 'dispensers.update', entity: 'Dispenser', entityId: id, oldValues: { status: current.status }, newValues: { status: dispenser.status, serialNumber: dispenser.serialNumber } });
     return dispenser;
   }
 
@@ -117,7 +159,11 @@ export class DispensersService {
     const returnedAt = dto.returnedAt ? new Date(dto.returnedAt) : new Date();
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      const result = await tx.dispenserComodato.update({ where: { id }, data: { status: 'RETURNED', returnedAt, notes: dto.notes?.trim() ?? comodato.notes } });
+      const result = await tx.dispenserComodato.update({
+        where: { id },
+        data: { status: 'RETURNED', returnedAt, notes: dto.notes?.trim() ?? comodato.notes },
+        include: { customer: true, dispenser: { include: { model: true } } }
+      });
       await tx.dispenser.update({ where: { id: comodato.dispenserId }, data: { status: 'AVAILABLE', currentCustomerId: null } });
       await tx.dispenserMovement.create({
         data: { tenantId, dispenserId: comodato.dispenserId, customerId: comodato.customerId, comodatoId: id, type: 'RETIRED', movedAt: returnedAt, notes: dto.notes?.trim() }

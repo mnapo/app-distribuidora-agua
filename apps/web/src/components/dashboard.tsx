@@ -23,8 +23,14 @@ import {
   apiRequest,
   AuthResponse,
   Branch,
+  ContainerBalance,
+  ContainerMovement,
+  ContainerType,
   Customer,
   DeliveryRoute,
+  Dispenser,
+  DispenserComodato,
+  DispenserModel,
   Driver,
   Health,
   InventoryItem,
@@ -59,6 +65,12 @@ type DashboardData = {
   vehicles: Vehicle[];
   drivers: Driver[];
   deliveryRoutes: DeliveryRoute[];
+  containerTypes: ContainerType[];
+  containerMovements: ContainerMovement[];
+  containerBalances: ContainerBalance[];
+  dispenserModels: DispenserModel[];
+  dispensers: Dispenser[];
+  dispenserComodatos: DispenserComodato[];
   inventory: InventoryItem[];
   orders: Order[];
   invoices: Invoice[];
@@ -73,8 +85,13 @@ type ModuleKey =
   | 'logistica'
   | 'ventas'
   | 'facturacion'
+  | 'activos'
   | 'admin'
   | 'reportes';
+
+type LogisticsTabKey = 'branches' | 'warehouses' | 'vehicles' | 'drivers' | 'routes';
+type ProductTabKey = 'products' | 'categories' | 'priceLists' | 'prices';
+type AssetsTabKey = 'containers' | 'movements' | 'balances' | 'equipment' | 'models' | 'loans';
 
 type FieldProps = {
   label: string;
@@ -89,6 +106,13 @@ type DraftOrderItem = {
   productId: string;
   quantity: string;
   unitPrice: string;
+};
+
+type TabItem<TKey extends string> = {
+  key: TKey;
+  label: string;
+  icon: React.ReactNode;
+  count?: number;
 };
 
 const initialData: DashboardData = {
@@ -106,6 +130,12 @@ const initialData: DashboardData = {
   vehicles: [],
   drivers: [],
   deliveryRoutes: [],
+  containerTypes: [],
+  containerMovements: [],
+  containerBalances: [],
+  dispenserModels: [],
+  dispensers: [],
+  dispenserComodatos: [],
   inventory: [],
   orders: [],
   invoices: [],
@@ -120,6 +150,7 @@ const navItems: { key: ModuleKey; label: string; icon: React.ReactNode }[] = [
   { key: 'logistica', label: 'Logistica', icon: <Truck size={19} /> },
   { key: 'ventas', label: 'Ventas', icon: <ShoppingCart size={19} /> },
   { key: 'facturacion', label: 'Facturacion', icon: <CreditCard size={19} /> },
+  { key: 'activos', label: 'Activos', icon: <Boxes size={19} /> },
   { key: 'admin', label: 'Administracion', icon: <Settings size={19} /> },
   { key: 'reportes', label: 'Reportes', icon: <BarChart3 size={19} /> }
 ];
@@ -144,6 +175,9 @@ export function Dashboard({
   onLogout: () => void;
 }) {
   const [activeModule, setActiveModule] = useState<ModuleKey>('inicio');
+  const [activeLogisticsTab, setActiveLogisticsTab] = useState<LogisticsTabKey>('branches');
+  const [activeProductTab, setActiveProductTab] = useState<ProductTabKey>('products');
+  const [activeAssetsTab, setActiveAssetsTab] = useState<AssetsTabKey>('containers');
   const [data, setData] = useState<DashboardData>(initialData);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -206,6 +240,29 @@ export function Dashboard({
     notes: '',
     orderIds: [] as string[]
   });
+  const [containerTypeForm, setContainerTypeForm] = useState({ name: '', code: '', capacity: '' });
+  const [containerMovementForm, setContainerMovementForm] = useState({
+    customerId: '',
+    containerTypeId: '',
+    type: 'DELIVERED',
+    quantity: '1',
+    reference: '',
+    notes: ''
+  });
+  const [dispenserModelForm, setDispenserModelForm] = useState({ name: '', code: '', capacity: '' });
+  const [dispenserForm, setDispenserForm] = useState({
+    modelId: '',
+    serialNumber: '',
+    acquiredAt: '',
+    notes: ''
+  });
+  const [dispenserComodatoForm, setDispenserComodatoForm] = useState({
+    dispenserId: '',
+    customerId: '',
+    deliveredAt: '',
+    depositAmount: '',
+    notes: ''
+  });
   const [orderForm, setOrderForm] = useState({
     customerId: '',
     productId: '',
@@ -260,6 +317,10 @@ export function Dashboard({
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
   const [editingWarehouseId, setEditingWarehouseId] = useState<string | null>(null);
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
+  const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
+  const [editingContainerTypeId, setEditingContainerTypeId] = useState<string | null>(null);
+  const [editingDispenserModelId, setEditingDispenserModelId] = useState<string | null>(null);
+  const [editingDispenserId, setEditingDispenserId] = useState<string | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
   const [editingTenantId, setEditingTenantId] = useState<string | null>(null);
@@ -294,6 +355,12 @@ export function Dashboard({
         vehicles,
         drivers,
         deliveryRoutes,
+        containerTypes,
+        containerMovements,
+        containerBalances,
+        dispenserModels,
+        dispensers,
+        dispenserComodatos,
         inventory,
         orders,
         invoices,
@@ -335,6 +402,24 @@ export function Dashboard({
           ? request<Paginated<DeliveryRoute>>('/delivery-routes', { token: accessToken }).then((r) => r.data)
           : Promise.resolve([]),
         canManageTenant
+          ? request<Paginated<ContainerType>>('/containers/types', { token: accessToken }).then((r) => r.data)
+          : Promise.resolve([]),
+        canManageTenant
+          ? request<Paginated<ContainerMovement>>('/containers/movements', { token: accessToken }).then((r) => r.data)
+          : Promise.resolve([]),
+        canManageTenant
+          ? request<Paginated<ContainerBalance>>('/containers/balances', { token: accessToken }).then((r) => r.data)
+          : Promise.resolve([]),
+        canManageTenant
+          ? request<Paginated<DispenserModel>>('/dispensers/models', { token: accessToken }).then((r) => r.data)
+          : Promise.resolve([]),
+        canManageTenant
+          ? request<Paginated<Dispenser>>('/dispensers', { token: accessToken }).then((r) => r.data)
+          : Promise.resolve([]),
+        canManageTenant
+          ? request<Paginated<DispenserComodato>>('/dispensers/comodatos/list', { token: accessToken }).then((r) => r.data)
+          : Promise.resolve([]),
+        canManageTenant
           ? request<Paginated<InventoryItem>>('/inventory', { token: accessToken }).then((r) => r.data)
           : Promise.resolve([]),
         canManageTenant
@@ -364,6 +449,12 @@ export function Dashboard({
         vehicles,
         drivers,
         deliveryRoutes,
+        containerTypes,
+        containerMovements,
+        containerBalances,
+        dispenserModels,
+        dispensers,
+        dispenserComodatos,
         inventory,
         orders,
         invoices,
@@ -380,6 +471,30 @@ export function Dashboard({
         driverId: current.driverId || drivers[0]?.id || '',
         vehicleId: current.vehicleId || vehicles[0]?.id || ''
       }));
+      setContainerMovementForm((current) => ({
+        ...current,
+        customerId: current.customerId || customers[0]?.id || '',
+        containerTypeId: current.containerTypeId || containerTypes[0]?.id || ''
+      }));
+      setDispenserForm((current) => ({ ...current, modelId: current.modelId || dispenserModels[0]?.id || '' }));
+      const activeComodatoDispenserIds = new Set(
+        dispenserComodatos
+          .filter((comodato) => comodato.status === 'ACTIVE')
+          .map((comodato) => comodato.dispenser.id)
+      );
+      const nextAvailableDispenserId =
+        dispensers.find(
+          (dispenser) =>
+            !activeComodatoDispenserIds.has(dispenser.id) &&
+            dispenser.status !== 'MAINTENANCE' &&
+            dispenser.status !== 'RETIRED'
+        )?.id || '';
+
+      setDispenserComodatoForm((current) => ({
+        ...current,
+        dispenserId: current.dispenserId || nextAvailableDispenserId,
+        customerId: current.customerId || customers[0]?.id || ''
+      }));
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'No se pudieron cargar los datos');
     } finally {
@@ -390,6 +505,34 @@ export function Dashboard({
   useEffect(() => {
     void loadData();
   }, []);
+
+  useEffect(() => {
+    if (!orderForm.customerId) return;
+
+    const customer = data.customers.find((item) => item.id === orderForm.customerId);
+    const address = customer?.addresses?.[0];
+    if (!address) return;
+
+    setOrderForm((current) => {
+      if (
+        current.customerId !== orderForm.customerId ||
+        current.deliveryStreet ||
+        current.deliveryCity ||
+        current.deliveryProvince ||
+        current.deliveryReference
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        deliveryStreet: address.street ?? '',
+        deliveryCity: address.city ?? '',
+        deliveryProvince: address.province ?? '',
+        deliveryReference: address.reference ?? ''
+      };
+    });
+  }, [data.customers, orderForm.customerId]);
 
   const metrics = useMemo(
     () => [
@@ -697,8 +840,10 @@ export function Dashboard({
   }
 
   async function createDeliveryRoute() {
-    if (!routeForm.orderIds.length) return;
-    await post<DeliveryRoute>('/delivery-routes', {
+    if (!routeForm.orderIds.length) {
+      throw new Error('Para crear una ruta, primero selecciona al menos un pedido confirmado');
+    }
+    const payload = {
       name: routeForm.name,
       routeDate: routeForm.routeDate,
       warehouseId: routeForm.warehouseId,
@@ -706,7 +851,16 @@ export function Dashboard({
       vehicleId: routeForm.vehicleId,
       notes: routeForm.notes || undefined,
       orders: routeForm.orderIds.map((orderId, index) => ({ orderId, sequence: index + 1 }))
-    });
+    };
+    if (editingRouteId) {
+      await patch<DeliveryRoute>(`/delivery-routes/${editingRouteId}`, payload);
+    } else {
+      await post<DeliveryRoute>('/delivery-routes', payload);
+    }
+    resetRouteForm();
+  }
+
+  function resetRouteForm() {
     setRouteForm({
       name: '',
       routeDate: '',
@@ -716,6 +870,119 @@ export function Dashboard({
       notes: '',
       orderIds: []
     });
+    setEditingRouteId(null);
+  }
+
+  function editDeliveryRoute(route: DeliveryRoute) {
+    if (route.status !== 'DRAFT') return;
+    setEditingRouteId(route.id);
+    setActiveLogisticsTab('routes');
+    setRouteForm({
+      name: route.name,
+      routeDate: route.routeDate.slice(0, 10),
+      warehouseId: route.warehouse.id,
+      driverId: route.driver.id,
+      vehicleId: route.vehicle.id,
+      notes: '',
+      orderIds: route.orders.map((routeOrder) => routeOrder.order.id)
+    });
+  }
+
+  async function createContainerType() {
+    const payload = {
+      name: containerTypeForm.name,
+      code: containerTypeForm.code || undefined,
+      capacity: containerTypeForm.capacity ? Number(containerTypeForm.capacity) : undefined,
+      active: true
+    };
+    if (editingContainerTypeId) {
+      await patch<ContainerType>(`/containers/types/${editingContainerTypeId}`, payload);
+    } else {
+      await post<ContainerType>('/containers/types', payload);
+    }
+    setContainerTypeForm({ name: '', code: '', capacity: '' });
+    setEditingContainerTypeId(null);
+  }
+
+  async function deactivateContainerType(typeId: string) {
+    await patch<ContainerType>(`/containers/types/${typeId}`, { active: false });
+    await loadData();
+  }
+
+  async function createContainerMovement() {
+    await post<ContainerMovement>('/containers/movements', {
+      customerId: containerMovementForm.customerId,
+      containerTypeId: containerMovementForm.containerTypeId,
+      type: containerMovementForm.type,
+      quantity: Number(containerMovementForm.quantity),
+      reference: containerMovementForm.reference || undefined,
+      notes: containerMovementForm.notes || undefined
+    });
+    setContainerMovementForm((current) => ({ ...current, quantity: '1', reference: '', notes: '' }));
+  }
+
+  async function createDispenserModel() {
+    const payload = {
+      name: dispenserModelForm.name,
+      code: dispenserModelForm.code || undefined,
+      capacity: dispenserModelForm.capacity ? Number(dispenserModelForm.capacity) : undefined,
+      active: true
+    };
+    if (editingDispenserModelId) {
+      await patch<DispenserModel>(`/dispensers/models/${editingDispenserModelId}`, payload);
+    } else {
+      await post<DispenserModel>('/dispensers/models', payload);
+    }
+    setDispenserModelForm({ name: '', code: '', capacity: '' });
+    setEditingDispenserModelId(null);
+  }
+
+  async function deactivateDispenserModel(modelId: string) {
+    await patch<DispenserModel>(`/dispensers/models/${modelId}`, { active: false });
+    await loadData();
+  }
+
+  async function createDispenser() {
+    const payload = {
+      modelId: dispenserForm.modelId,
+      serialNumber: dispenserForm.serialNumber,
+      acquiredAt: dispenserForm.acquiredAt || undefined,
+      notes: dispenserForm.notes || undefined
+    };
+    if (editingDispenserId) {
+      await patch<Dispenser>(`/dispensers/${editingDispenserId}`, payload);
+    } else {
+      await post<Dispenser>('/dispensers', payload);
+    }
+    setDispenserForm((current) => ({ modelId: current.modelId, serialNumber: '', acquiredAt: '', notes: '' }));
+    setEditingDispenserId(null);
+  }
+
+  async function retireDispenser(dispenserId: string) {
+    await patch<Dispenser>(`/dispensers/${dispenserId}`, { status: 'RETIRED' });
+    await loadData();
+  }
+
+  async function reactivateDispenser(dispenserId: string) {
+    await patch<Dispenser>(`/dispensers/${dispenserId}`, { status: 'AVAILABLE' });
+    await loadData();
+  }
+
+  async function createDispenserComodato() {
+    await post<DispenserComodato>('/dispensers/comodatos', {
+      dispenserId: dispenserComodatoForm.dispenserId,
+      customerId: dispenserComodatoForm.customerId,
+      deliveredAt: dispenserComodatoForm.deliveredAt || undefined,
+      depositAmount: dispenserComodatoForm.depositAmount ? Number(dispenserComodatoForm.depositAmount) : undefined,
+      notes: dispenserComodatoForm.notes || undefined
+    });
+    setDispenserComodatoForm((current) => ({ ...current, dispenserId: '', deliveredAt: '', depositAmount: '', notes: '' }));
+  }
+
+  async function retireDispenserComodato(comodato: DispenserComodato) {
+    await post<DispenserComodato>(`/dispensers/comodatos/${comodato.id}/retire`, { notes: 'Devolucion desde backoffice' });
+    setDispenserComodatoForm((current) => ({ ...current, dispenserId: comodato.dispenser.id }));
+    await loadData();
   }
 
   async function runRouteAction(routeId: string, action: 'prepare' | 'load-vehicle' | 'close-preliminary' | 'cancel') {
@@ -930,9 +1197,16 @@ export function Dashboard({
   }
 
   function updateOrderCustomer(customerId: string) {
+    const customer = data.customers.find((item) => item.id === customerId);
+    const address = customer?.addresses?.[0];
+
     setOrderForm((current) => ({
       ...current,
       customerId,
+      deliveryStreet: address?.street ?? '',
+      deliveryCity: address?.city ?? '',
+      deliveryProvince: address?.province ?? '',
+      deliveryReference: address?.reference ?? '',
       unitPrice: current.productId ? effectiveProductPrice(customerId, current.productId) : current.unitPrice
     }));
   }
@@ -1094,15 +1368,25 @@ export function Dashboard({
       );
     }
 
-    const routeCandidateOrders = data.orders.filter((order) => order.status === 'CONFIRMED' || order.status === 'FAILED_DELIVERY');
+    const editingRoute = editingRouteId ? data.deliveryRoutes.find((route) => route.id === editingRouteId) : null;
+    const routeCandidateOrders = [
+      ...data.orders.filter((order) => order.status === 'CONFIRMED' || order.status === 'FAILED_DELIVERY'),
+      ...(editingRoute?.orders.map((routeOrder) => routeOrder.order) ?? [])
+    ].filter((order, index, orders) => orders.findIndex((current) => current.id === order.id) === index);
+    const routeCreationMessage = routeCandidateOrders.length
+      ? 'Selecciona al menos un pedido confirmado para crear la ruta.'
+      : 'No hay pedidos confirmados disponibles para asignar a una ruta.';
+    const canCreateRoute = routeForm.orderIds.length > 0;
+    const selectedOrderCustomer = data.customers.find((customer) => customer.id === orderForm.customerId);
+    const selectedOrderCustomerAddress = selectedOrderCustomer?.addresses?.[0];
 
     switch (activeModule) {
       case 'clientes':
         return (
           <div className="grid gap-4 xl:grid-cols-[minmax(0,520px)_1fr]">
-            <Panel title="Nuevo cliente" icon={<Users size={18} />}>
-              <form onSubmit={(event) => submitForm(event, createCustomer)} className="grid gap-4">
-                <div className="grid gap-3 sm:grid-cols-2">
+            <Panel title={editingCustomerId ? 'Editar cliente' : 'Nuevo cliente'} icon={<Users size={18} />}>
+              <form onSubmit={(event) => submitForm(event, createCustomer)} className="grid gap-5">
+                <FormSection title="Datos principales">
                   <Select
                     label="Tipo"
                     value={customerForm.type}
@@ -1136,8 +1420,19 @@ export function Dashboard({
                     </>
                   )}
                   <Field label="CUIT/DNI" value={customerForm.taxId} onChange={(value) => setCustomerForm({ ...customerForm, taxId: value })} />
+                </FormSection>
+                <FormSection title="Contacto">
                   <Field label="Email" type="email" value={customerForm.email} onChange={(value) => setCustomerForm({ ...customerForm, email: value })} />
                   <Field label="Telefono" value={customerForm.phone} onChange={(value) => setCustomerForm({ ...customerForm, phone: value })} />
+                </FormSection>
+                <FormSection title="Direccion de entrega">
+                  <Field label="Calle y numero" value={customerForm.street} onChange={(value) => setCustomerForm({ ...customerForm, street: value })} />
+                  <Field label="Localidad" value={customerForm.city} onChange={(value) => setCustomerForm({ ...customerForm, city: value })} />
+                  <Field label="Provincia" value={customerForm.province} onChange={(value) => setCustomerForm({ ...customerForm, province: value })} />
+                  <Field label="Codigo postal" value={customerForm.postalCode} onChange={(value) => setCustomerForm({ ...customerForm, postalCode: value })} />
+                  <Field label="Referencia" value={customerForm.reference} onChange={(value) => setCustomerForm({ ...customerForm, reference: value })} />
+                </FormSection>
+                <FormSection title="Condiciones comerciales">
                   <Field label="Limite credito" type="number" value={customerForm.creditLimit} onChange={(value) => setCustomerForm({ ...customerForm, creditLimit: value })} />
                   <Field label="Condicion pago" value={customerForm.paymentTerms} onChange={(value) => setCustomerForm({ ...customerForm, paymentTerms: value })} />
                   <Select
@@ -1146,23 +1441,21 @@ export function Dashboard({
                     onChange={(value) => setCustomerForm({ ...customerForm, priceListId: value })}
                     options={data.priceLists.filter((priceList) => priceList.active).map((priceList) => [priceList.id, priceList.name])}
                   />
-                  <Field label="Calle y numero" value={customerForm.street} onChange={(value) => setCustomerForm({ ...customerForm, street: value })} />
-                  <Field label="Localidad" value={customerForm.city} onChange={(value) => setCustomerForm({ ...customerForm, city: value })} />
-                  <Field label="Provincia" value={customerForm.province} onChange={(value) => setCustomerForm({ ...customerForm, province: value })} />
-                  <Field label="Codigo postal" value={customerForm.postalCode} onChange={(value) => setCustomerForm({ ...customerForm, postalCode: value })} />
-                  <Field label="Referencia" value={customerForm.reference} onChange={(value) => setCustomerForm({ ...customerForm, reference: value })} />
-                </div>
+                </FormSection>
                 <TextArea label="Notas" value={customerForm.notes} onChange={(value) => setCustomerForm({ ...customerForm, notes: value })} />
-              <PrimaryButton>{editingCustomerId ? 'Actualizar cliente' : 'Guardar cliente'}</PrimaryButton>
+                <div className="flex justify-end">
+                  <PrimaryButton>{editingCustomerId ? 'Actualizar cliente' : 'Guardar cliente'}</PrimaryButton>
+                </div>
               </form>
             </Panel>
             <Panel title="Clientes cargados" icon={<FileText size={18} />}>
               <Table
-                headers={['Cliente', 'Telefono', 'Email', 'Lista', 'Estado', 'Acciones']}
+                headers={['Cliente', 'Telefono', 'Email', 'Direccion', 'Lista', 'Estado', 'Acciones']}
                 rows={data.customers.map((customer) => [
                   customerName(customer),
                   customer.phone ?? '',
                   customer.email ?? '',
+                  customerAddressLabel(customer),
                   customer.priceList?.name ?? data.priceLists.find((priceList) => priceList.id === customer.priceListId)?.name ?? '',
                   customer.status,
                   <ActionButtons
@@ -1176,324 +1469,411 @@ export function Dashboard({
             </Panel>
           </div>
         );
-      case 'productos':
+      case 'productos': {
+        const productTabs: TabItem<ProductTabKey>[] = [
+          { key: 'products', label: 'Productos', icon: <Package size={16} />, count: data.products.length },
+          { key: 'categories', label: 'Categorias', icon: <Boxes size={16} />, count: data.categories.length },
+          { key: 'priceLists', label: 'Listas', icon: <FileText size={16} />, count: data.priceLists.length },
+          {
+            key: 'prices',
+            label: 'Precios',
+            icon: <CreditCard size={16} />,
+            count: data.priceLists.reduce((total, priceList) => total + priceList.items.length, 0)
+          }
+        ];
+
         return (
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,520px)_1fr]">
-            <div className="grid gap-4">
-              <Panel title="Categoria" icon={<Boxes size={18} />}>
-                <form onSubmit={(event) => submitForm(event, createCategory)} className="grid gap-3">
-                  <Field label="Nombre categoria" value={categoryForm.name} onChange={(value) => setCategoryForm({ name: value })} required />
-                  <PrimaryButton>{editingCategoryId ? 'Actualizar categoria' : 'Guardar categoria'}</PrimaryButton>
-                </form>
-                <Table
-                  headers={['Categoria', 'Estado', 'Acciones']}
-                  rows={data.categories.map((category) => [
-                    category.name,
-                    category.active ? 'Activa' : 'Inactiva',
-                    <ActionButtons
-                      key={category.id}
-                      onEdit={() => {
-                        setEditingCategoryId(category.id);
-                        setCategoryForm({ name: category.name });
-                      }}
-                      onDeactivate={() => void deactivate(`/product-categories/${category.id}`, { active: false })}
-                      disabled={!category.active}
-                    />
-                  ])}
-                />
-              </Panel>
-              <Panel title="Lista de precios" icon={<FileText size={18} />}>
-                <form onSubmit={(event) => submitForm(event, createPriceList)} className="grid gap-3">
-                  <Field label="Nombre lista" value={priceListForm.name} onChange={(value) => setPriceListForm({ ...priceListForm, name: value })} required />
-                  <Check label="Lista predeterminada" checked={priceListForm.isDefault} onChange={(value) => setPriceListForm({ ...priceListForm, isDefault: value })} />
-                  <PrimaryButton>{editingPriceListId ? 'Actualizar lista' : 'Guardar lista'}</PrimaryButton>
-                </form>
-                <Table
-                  headers={['Lista', 'Default', 'Estado', 'Acciones']}
-                  rows={data.priceLists.map((priceList) => [
-                    priceList.name,
-                    priceList.isDefault ? 'Si' : 'No',
-                    priceList.active ? 'Activa' : 'Inactiva',
-                    <ActionButtons
-                      key={priceList.id}
-                      onEdit={() => {
-                        setEditingPriceListId(priceList.id);
-                        setPriceListForm({ name: priceList.name, isDefault: priceList.isDefault });
-                      }}
-                      onDeactivate={() => void deactivate(`/price-lists/${priceList.id}`, { active: false })}
-                      disabled={!priceList.active}
-                    />
-                  ])}
-                />
-              </Panel>
-              <Panel title="Precios por lista" icon={<CreditCard size={18} />}>
-                <form onSubmit={(event) => submitForm(event, savePriceListItem)} className="grid gap-3">
-                  <Select
-                    label="Lista"
-                    value={priceListItemForm.priceListId}
-                    onChange={(value) => setPriceListItemForm({ ...priceListItemForm, priceListId: value })}
-                    options={data.priceLists.filter((priceList) => priceList.active).map((priceList) => [priceList.id, priceList.name])}
-                    required
-                  />
-                  <Select
-                    label="Producto"
-                    value={priceListItemForm.productId}
-                    onChange={(value) => setPriceListItemForm({ ...priceListItemForm, productId: value })}
-                    options={data.products.filter((product) => product.active).map((product) => [product.id, `${product.sku} - ${product.name}`])}
-                    required
-                  />
-                  <Field
-                    label="Precio en esta lista"
-                    type="number"
-                    value={priceListItemForm.price}
-                    onChange={(value) => setPriceListItemForm({ ...priceListItemForm, price: value })}
-                    required
-                  />
-                  <PrimaryButton>Guardar precio</PrimaryButton>
-                </form>
-                <Table
-                  headers={['Lista', 'Producto', 'Precio', 'Acciones']}
-                  rows={data.priceLists.flatMap((priceList) =>
-                    priceList.items.map((item) => [
-                      priceList.name,
-                      item.product?.name ?? data.products.find((product) => product.id === item.productId)?.name ?? item.productId,
-                      item.price,
-                      <button
-                        key={`${priceList.id}-${item.productId}`}
-                        type="button"
-                        onClick={() => void removePriceListItem(priceList, item.productId)}
-                        className="border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:border-red-500"
-                      >
-                        Quitar
-                      </button>
-                    ])
-                  )}
-                />
-              </Panel>
-              <Panel title="Producto" icon={<Package size={18} />}>
-                <form onSubmit={(event) => submitForm(event, createProduct)} className="grid gap-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="SKU" value={productForm.sku} onChange={(value) => setProductForm({ ...productForm, sku: value })} />
-                    <Field label="Codigo barras" value={productForm.barcode} onChange={(value) => setProductForm({ ...productForm, barcode: value })} />
-                    <Field label="Nombre" value={productForm.name} onChange={(value) => setProductForm({ ...productForm, name: value })} required />
-                    <Select label="Categoria" value={productForm.categoryId} onChange={(value) => setProductForm({ ...productForm, categoryId: value })} options={data.categories.map((category) => [category.id, category.name])} />
-                    <Select label="Unidad" value={productForm.unit} onChange={(value) => setProductForm({ ...productForm, unit: value })} options={productUnitOptions} required />
-                    <Field label="Litros" type="number" value={productForm.liters} onChange={(value) => setProductForm({ ...productForm, liters: value })} />
-                    <Field label="Costo" type="number" value={productForm.cost} onChange={(value) => setProductForm({ ...productForm, cost: value })} />
-                    <Field label="Precio" type="number" value={productForm.price} onChange={(value) => setProductForm({ ...productForm, price: value })} />
-                    <Field label="IVA %" type="number" value={productForm.tax} onChange={(value) => setProductForm({ ...productForm, tax: value })} />
-                  </div>
-                  <TextArea label="Descripcion" value={productForm.description} onChange={(value) => setProductForm({ ...productForm, description: value })} />
-                  <div className="flex flex-wrap gap-3">
-                    <Check label="Retornable" checked={productForm.returnable} onChange={(value) => setProductForm({ ...productForm, returnable: value })} />
-                    <Check label="Requiere envase" checked={productForm.requiresContainer} onChange={(value) => setProductForm({ ...productForm, requiresContainer: value })} />
-                  </div>
-                  <PrimaryButton>{editingProductId ? 'Actualizar producto' : 'Guardar producto'}</PrimaryButton>
-                </form>
-              </Panel>
-            </div>
-            <Panel title="Productos cargados" icon={<Package size={18} />}>
-              <Table
-                headers={['SKU', 'Producto', 'Categoria', 'Unidad', 'Precio base', 'Precios listas', 'Acciones']}
-                rows={data.products.map((product) => [
-                  product.sku,
-                  product.name,
-                  product.category?.name ?? '',
-                  product.unit,
-                  product.price,
-                  data.priceLists
-                    .flatMap((priceList) =>
-                      priceList.items
-                        .filter((item) => item.productId === product.id)
-                        .map((item) => `${priceList.name}: ${item.price}`)
-                    )
-                    .join(' | '),
-                  <ActionButtons
-                    key={product.id}
-                    onEdit={() => editProduct(product)}
-                    onDeactivate={() => void deactivate(`/products/${product.id}`, { active: false })}
-                    disabled={!product.active}
-                  />
-                ])}
-              />
-            </Panel>
-          </div>
-        );
-      case 'logistica':
-        return (
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Panel title="Sucursal" icon={<Building2 size={18} />}>
-              <form onSubmit={(event) => submitForm(event, createBranch)} className="grid gap-3 sm:grid-cols-2">
-                <Field label="Nombre" value={branchForm.name} onChange={(value) => setBranchForm({ ...branchForm, name: value })} required />
-                <Field label="Codigo" value={branchForm.code} onChange={(value) => setBranchForm({ ...branchForm, code: value })} />
-                <Field label="Telefono" value={branchForm.phone} onChange={(value) => setBranchForm({ ...branchForm, phone: value })} />
-                <Field label="Direccion" value={branchForm.address} onChange={(value) => setBranchForm({ ...branchForm, address: value })} />
-                <PrimaryButton>{editingBranchId ? 'Actualizar sucursal' : 'Guardar sucursal'}</PrimaryButton>
-              </form>
-              <Table
-                headers={['Sucursal', 'Codigo', 'Telefono', 'Acciones']}
-                rows={data.branches.map((branch) => [
-                  branch.name,
-                  branch.code ?? '',
-                  branch.phone ?? '',
-                  <ActionButtons
-                    key={branch.id}
-                    onEdit={() => {
-                      setEditingBranchId(branch.id);
-                      setBranchForm({
-                        name: branch.name,
-                        code: branch.code ?? '',
-                        address: branch.address ?? '',
-                        phone: branch.phone ?? ''
-                      });
-                    }}
-                    onDeactivate={() => void deactivate(`/branches/${branch.id}`, { active: false })}
-                    disabled={!branch.active}
-                  />
-                ])}
-              />
-            </Panel>
-            <Panel title="Deposito" icon={<Factory size={18} />}>
-              <form onSubmit={(event) => submitForm(event, createWarehouse)} className="grid gap-3 sm:grid-cols-2">
-                <Field label="Nombre" value={warehouseForm.name} onChange={(value) => setWarehouseForm({ ...warehouseForm, name: value })} required />
-                <Field label="Codigo" value={warehouseForm.code} onChange={(value) => setWarehouseForm({ ...warehouseForm, code: value })} />
-                <Select label="Sucursal" value={warehouseForm.branchId} onChange={(value) => setWarehouseForm({ ...warehouseForm, branchId: value })} options={data.branches.map((branch) => [branch.id, branch.name])} />
-                <Field label="Direccion" value={warehouseForm.address} onChange={(value) => setWarehouseForm({ ...warehouseForm, address: value })} />
-                <PrimaryButton>{editingWarehouseId ? 'Actualizar deposito' : 'Guardar deposito'}</PrimaryButton>
-              </form>
-              <Table
-                headers={['Deposito', 'Sucursal', 'Codigo', 'Acciones']}
-                rows={data.warehouses.map((warehouse) => [
-                  warehouse.name,
-                  warehouse.branch?.name ?? '',
-                  warehouse.code ?? '',
-                  <ActionButtons
-                    key={warehouse.id}
-                    onEdit={() => {
-                      setEditingWarehouseId(warehouse.id);
-                      setWarehouseForm({
-                        name: warehouse.name,
-                        code: warehouse.code ?? '',
-                        branchId: warehouse.branch?.id ?? '',
-                        address: warehouse.address ?? ''
-                      });
-                    }}
-                    onDeactivate={() => void deactivate(`/warehouses/${warehouse.id}`, { active: false })}
-                    disabled={!warehouse.active}
-                  />
-                ])}
-              />
-            </Panel>
-            <Panel title="Vehiculo" icon={<Truck size={18} />}>
-              <form onSubmit={(event) => submitForm(event, createVehicle)} className="grid gap-3 sm:grid-cols-2">
-                <Field label="Patente" value={vehicleForm.plate} onChange={(value) => setVehicleForm({ ...vehicleForm, plate: value })} required />
-                <Field label="Marca" value={vehicleForm.brand} onChange={(value) => setVehicleForm({ ...vehicleForm, brand: value })} />
-                <Field label="Modelo" value={vehicleForm.model} onChange={(value) => setVehicleForm({ ...vehicleForm, model: value })} />
-                <Field label="Anio" type="number" value={vehicleForm.year} onChange={(value) => setVehicleForm({ ...vehicleForm, year: value })} />
-                <Field label="Capacidad" type="number" value={vehicleForm.capacity} onChange={(value) => setVehicleForm({ ...vehicleForm, capacity: value })} />
-                <Select label="Estado" value={vehicleForm.status} onChange={(value) => setVehicleForm({ ...vehicleForm, status: value })} options={[['ACTIVE', 'Activo'], ['MAINTENANCE', 'Mantenimiento'], ['INACTIVE', 'Inactivo']]} />
-                <PrimaryButton>{editingVehicleId ? 'Actualizar vehiculo' : 'Guardar vehiculo'}</PrimaryButton>
-              </form>
-              <Table
-                headers={['Patente', 'Marca', 'Modelo', 'Estado', 'Acciones']}
-                rows={data.vehicles.map((vehicle) => [
-                  vehicle.plate,
-                  vehicle.brand ?? '',
-                  vehicle.model ?? '',
-                  vehicle.status,
-                  <ActionButtons
-                    key={vehicle.id}
-                    onEdit={() => {
-                      setEditingVehicleId(vehicle.id);
-                      setVehicleForm({
-                        plate: vehicle.plate,
-                        brand: vehicle.brand ?? '',
-                        model: vehicle.model ?? '',
-                        year: vehicle.year ? String(vehicle.year) : '',
-                        capacity: vehicle.capacity ?? '',
-                        status: vehicle.status
-                      });
-                    }}
-                    onDeactivate={() => void deactivate(`/vehicles/${vehicle.id}`, { status: 'INACTIVE' })}
-                    disabled={vehicle.status !== 'ACTIVE'}
-                  />
-                ])}
-              />
-            </Panel>
-            <Panel title="Chofer" icon={<Route size={18} />}>
-              <form onSubmit={(event) => submitForm(event, createDriver)} className="grid gap-3 sm:grid-cols-2">
-                <Select label="Usuario" value={driverForm.userId} onChange={(value) => setDriverForm({ ...driverForm, userId: value })} options={data.users.map((user) => [user.id, `${user.firstName} ${user.lastName}`])} required />
-                <Field label="Licencia" value={driverForm.licenseNumber} onChange={(value) => setDriverForm({ ...driverForm, licenseNumber: value })} />
-                <Field label="Categoria" value={driverForm.licenseCategory} onChange={(value) => setDriverForm({ ...driverForm, licenseCategory: value })} />
-                <Select label="Estado" value={driverForm.status} onChange={(value) => setDriverForm({ ...driverForm, status: value })} options={[['ACTIVE', 'Activo'], ['INACTIVE', 'Inactivo']]} />
-                <PrimaryButton>Guardar chofer</PrimaryButton>
-              </form>
-              <Table headers={['Chofer', 'Licencia', 'Estado']} rows={data.drivers.map((driver) => [`${driver.user.firstName} ${driver.user.lastName}`, driver.licenseNumber ?? '', driver.status])} />
-            </Panel>
-            <Panel title="Ruta de reparto" icon={<Route size={18} />} className="xl:col-span-2">
-              <div className="grid gap-5">
-                <form onSubmit={(event) => submitForm(event, createDeliveryRoute)} className="grid gap-3">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Nombre" value={routeForm.name} onChange={(value) => setRouteForm({ ...routeForm, name: value })} required />
-                    <Field label="Fecha" type="date" value={routeForm.routeDate} onChange={(value) => setRouteForm({ ...routeForm, routeDate: value })} required />
-                    <Select label="Deposito" value={routeForm.warehouseId} onChange={(value) => setRouteForm({ ...routeForm, warehouseId: value })} options={data.warehouses.map((warehouse) => [warehouse.id, warehouse.name])} required />
-                    <Select label="Chofer" value={routeForm.driverId} onChange={(value) => setRouteForm({ ...routeForm, driverId: value })} options={data.drivers.map((driver) => [driver.id, `${driver.user.firstName} ${driver.user.lastName}`])} required />
-                    <Select label="Vehiculo" value={routeForm.vehicleId} onChange={(value) => setRouteForm({ ...routeForm, vehicleId: value })} options={data.vehicles.map((vehicle) => [vehicle.id, vehicle.plate])} required />
-                    <TextArea label="Notas" value={routeForm.notes} onChange={(value) => setRouteForm({ ...routeForm, notes: value })} className="sm:col-span-2" />
-                  </div>
-                  <div className="border border-border bg-slate-50 p-3">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-slate-700">Pedidos confirmados</p>
-                      <span className="text-xs text-slate-500">{routeForm.orderIds.length} seleccionados</span>
-                    </div>
+          <div className="grid gap-4">
+            <Panel title="Catalogo de productos" icon={<Package size={18} />}>
+              <AdminTabs tabs={productTabs} activeKey={activeProductTab} onChange={setActiveProductTab} />
+              <div className="mt-5">
+                {activeProductTab === 'products' ? (
+                  <EntitySection title={editingProductId ? 'Editar producto' : 'Nuevo producto'} tableTitle="Productos cargados">
+                    <form onSubmit={(event) => submitForm(event, createProduct)} className="grid gap-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="SKU" value={productForm.sku} onChange={(value) => setProductForm({ ...productForm, sku: value })} />
+                        <Field label="Codigo barras" value={productForm.barcode} onChange={(value) => setProductForm({ ...productForm, barcode: value })} />
+                        <Field label="Nombre" value={productForm.name} onChange={(value) => setProductForm({ ...productForm, name: value })} required />
+                        <Select label="Categoria" value={productForm.categoryId} onChange={(value) => setProductForm({ ...productForm, categoryId: value })} options={data.categories.map((category) => [category.id, category.name])} />
+                        <Select label="Unidad" value={productForm.unit} onChange={(value) => setProductForm({ ...productForm, unit: value })} options={productUnitOptions} required />
+                        <Field label="Litros" type="number" value={productForm.liters} onChange={(value) => setProductForm({ ...productForm, liters: value })} />
+                        <Field label="Costo" type="number" value={productForm.cost} onChange={(value) => setProductForm({ ...productForm, cost: value })} />
+                        <Field label="Precio" type="number" value={productForm.price} onChange={(value) => setProductForm({ ...productForm, price: value })} />
+                        <Field label="IVA %" type="number" value={productForm.tax} onChange={(value) => setProductForm({ ...productForm, tax: value })} />
+                      </div>
+                      <TextArea label="Descripcion" value={productForm.description} onChange={(value) => setProductForm({ ...productForm, description: value })} />
+                      <div className="flex flex-wrap gap-3">
+                        <Check label="Retornable" checked={productForm.returnable} onChange={(value) => setProductForm({ ...productForm, returnable: value })} />
+                        <Check label="Requiere envase" checked={productForm.requiresContainer} onChange={(value) => setProductForm({ ...productForm, requiresContainer: value })} />
+                      </div>
+                      <div className="flex justify-end">
+                        <PrimaryButton>{editingProductId ? 'Actualizar producto' : 'Guardar producto'}</PrimaryButton>
+                      </div>
+                    </form>
                     <Table
-                      headers={['Asignar', 'Cliente', 'Estado', 'Total', 'Direccion']}
-                      rows={routeCandidateOrders.map((order) => [
-                        <input
-                          key={order.id}
-                          type="checkbox"
-                          checked={routeForm.orderIds.includes(order.id)}
-                          onChange={(event) => toggleRouteOrder(order.id, event.target.checked)}
-                          className="h-4 w-4 accent-primary"
-                        />,
-                        customerName(order.customer),
-                        orderStatusLabel(order.status),
-                        order.total,
-                        order.deliveryStreet ?? ''
+                      headers={['SKU', 'Producto', 'Categoria', 'Unidad', 'Precio base', 'Precios listas', 'Acciones']}
+                      rows={data.products.map((product) => [
+                        product.sku,
+                        product.name,
+                        product.category?.name ?? '',
+                        product.unit,
+                        product.price,
+                        data.priceLists
+                          .flatMap((priceList) =>
+                            priceList.items
+                              .filter((item) => item.productId === product.id)
+                              .map((item) => `${priceList.name}: ${item.price}`)
+                          )
+                          .join(' | '),
+                        <ActionButtons
+                          key={product.id}
+                          onEdit={() => editProduct(product)}
+                          onDeactivate={() => void deactivate(`/products/${product.id}`, { active: false })}
+                          disabled={!product.active}
+                        />
                       ])}
                     />
-                  </div>
-                  <PrimaryButton>Crear ruta y asignar pedidos</PrimaryButton>
-                </form>
-                <div className="min-w-0 border-t border-border pt-4">
-                  <Table
-                    headers={['Ruta', 'Fecha', 'Chofer', 'Vehiculo', 'Estado', 'Paradas', 'Cobros', 'Facturas', 'Acciones']}
-                    rows={data.deliveryRoutes.map((route) => [
-                      route.name,
-                      route.routeDate.slice(0, 10),
-                      `${route.driver.user.firstName} ${route.driver.user.lastName}`,
-                      route.vehicle.plate,
-                      routeStatusLabel(route.status),
-                      <RouteStopsSummary key={`${route.id}-stops`} route={route} />,
-                      <RoutePaymentsSummary key={`${route.id}-payments`} route={route} />,
-                      <RouteInvoicesSummary key={`${route.id}-invoices`} route={route} />,
-                      <RouteActions
-                        key={route.id}
-                        route={route}
-                        onView={() => setSelectedRouteId(route.id)}
-                        onPrepare={() => void runRouteAction(route.id, 'prepare')}
-                        onLoad={() => void runRouteAction(route.id, 'load-vehicle')}
-                        onClose={() => void runRouteAction(route.id, 'close-preliminary')}
-                        onCancel={() => void runRouteAction(route.id, 'cancel')}
-                      />
-                    ])}
-                  />
-                  {selectedRouteId ? <RouteDetailPanel route={data.deliveryRoutes.find((route) => route.id === selectedRouteId) ?? null} onClose={() => setSelectedRouteId(null)} /> : null}
-                </div>
+                  </EntitySection>
+                ) : null}
+                {activeProductTab === 'categories' ? (
+                  <EntitySection title={editingCategoryId ? 'Editar categoria' : 'Nueva categoria'} tableTitle="Categorias cargadas">
+                    <form onSubmit={(event) => submitForm(event, createCategory)} className="grid gap-4">
+                      <Field label="Nombre categoria" value={categoryForm.name} onChange={(value) => setCategoryForm({ name: value })} required />
+                      <div className="flex justify-end">
+                        <PrimaryButton>{editingCategoryId ? 'Actualizar categoria' : 'Guardar categoria'}</PrimaryButton>
+                      </div>
+                    </form>
+                    <Table
+                      headers={['Categoria', 'Estado', 'Acciones']}
+                      rows={data.categories.map((category) => [
+                        category.name,
+                        category.active ? 'Activa' : 'Inactiva',
+                        <ActionButtons
+                          key={category.id}
+                          onEdit={() => {
+                            setEditingCategoryId(category.id);
+                            setCategoryForm({ name: category.name });
+                          }}
+                          onDeactivate={() => void deactivate(`/product-categories/${category.id}`, { active: false })}
+                          disabled={!category.active}
+                        />
+                      ])}
+                    />
+                  </EntitySection>
+                ) : null}
+                {activeProductTab === 'priceLists' ? (
+                  <EntitySection title={editingPriceListId ? 'Editar lista de precios' : 'Nueva lista de precios'} tableTitle="Listas de precios cargadas">
+                    <form onSubmit={(event) => submitForm(event, createPriceList)} className="grid gap-4">
+                      <Field label="Nombre lista" value={priceListForm.name} onChange={(value) => setPriceListForm({ ...priceListForm, name: value })} required />
+                      <Check label="Lista predeterminada" checked={priceListForm.isDefault} onChange={(value) => setPriceListForm({ ...priceListForm, isDefault: value })} />
+                      <div className="flex justify-end">
+                        <PrimaryButton>{editingPriceListId ? 'Actualizar lista' : 'Guardar lista'}</PrimaryButton>
+                      </div>
+                    </form>
+                    <Table
+                      headers={['Lista', 'Default', 'Estado', 'Acciones']}
+                      rows={data.priceLists.map((priceList) => [
+                        priceList.name,
+                        priceList.isDefault ? 'Si' : 'No',
+                        priceList.active ? 'Activa' : 'Inactiva',
+                        <ActionButtons
+                          key={priceList.id}
+                          onEdit={() => {
+                            setEditingPriceListId(priceList.id);
+                            setPriceListForm({ name: priceList.name, isDefault: priceList.isDefault });
+                          }}
+                          onDeactivate={() => void deactivate(`/price-lists/${priceList.id}`, { active: false })}
+                          disabled={!priceList.active}
+                        />
+                      ])}
+                    />
+                  </EntitySection>
+                ) : null}
+                {activeProductTab === 'prices' ? (
+                  <EntitySection title="Nuevo precio por lista" tableTitle="Precios por lista cargados">
+                    <form onSubmit={(event) => submitForm(event, savePriceListItem)} className="grid gap-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Select
+                          label="Lista"
+                          value={priceListItemForm.priceListId}
+                          onChange={(value) => setPriceListItemForm({ ...priceListItemForm, priceListId: value })}
+                          options={data.priceLists.filter((priceList) => priceList.active).map((priceList) => [priceList.id, priceList.name])}
+                          required
+                        />
+                        <Select
+                          label="Producto"
+                          value={priceListItemForm.productId}
+                          onChange={(value) => setPriceListItemForm({ ...priceListItemForm, productId: value })}
+                          options={data.products.filter((product) => product.active).map((product) => [product.id, `${product.sku} - ${product.name}`])}
+                          required
+                        />
+                        <Field
+                          label="Precio en esta lista"
+                          type="number"
+                          value={priceListItemForm.price}
+                          onChange={(value) => setPriceListItemForm({ ...priceListItemForm, price: value })}
+                          required
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <PrimaryButton>Guardar precio</PrimaryButton>
+                      </div>
+                    </form>
+                    <Table
+                      headers={['Lista', 'Producto', 'Precio', 'Acciones']}
+                      rows={data.priceLists.flatMap((priceList) =>
+                        priceList.items.map((item) => [
+                          priceList.name,
+                          item.product?.name ?? data.products.find((product) => product.id === item.productId)?.name ?? item.productId,
+                          item.price,
+                          <button
+                            key={`${priceList.id}-${item.productId}`}
+                            type="button"
+                            onClick={() => void removePriceListItem(priceList, item.productId)}
+                            className="border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:border-red-500"
+                          >
+                            Quitar
+                          </button>
+                        ])
+                      )}
+                    />
+                  </EntitySection>
+                ) : null}
               </div>
             </Panel>
           </div>
         );
+      }
+      case 'logistica': {
+        const logisticsTabs: TabItem<LogisticsTabKey>[] = [
+          { key: 'branches', label: 'Sucursales', icon: <Building2 size={16} />, count: data.branches.length },
+          { key: 'warehouses', label: 'Depositos', icon: <Factory size={16} />, count: data.warehouses.length },
+          { key: 'vehicles', label: 'Vehiculos', icon: <Truck size={16} />, count: data.vehicles.length },
+          { key: 'drivers', label: 'Choferes', icon: <Route size={16} />, count: data.drivers.length },
+          { key: 'routes', label: 'Rutas', icon: <Route size={16} />, count: data.deliveryRoutes.length }
+        ];
+
+        return (
+          <div className="grid gap-4">
+            <Panel title="Configuracion logistica" icon={<Truck size={18} />}>
+              <AdminTabs tabs={logisticsTabs} activeKey={activeLogisticsTab} onChange={setActiveLogisticsTab} />
+              <div className="mt-5">
+                {activeLogisticsTab === 'branches' ? (
+                  <EntitySection title={editingBranchId ? 'Editar sucursal' : 'Nueva sucursal'} tableTitle="Sucursales registradas">
+                    <form onSubmit={(event) => submitForm(event, createBranch)} className="grid gap-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Nombre" value={branchForm.name} onChange={(value) => setBranchForm({ ...branchForm, name: value })} required />
+                        <Field label="Codigo" value={branchForm.code} onChange={(value) => setBranchForm({ ...branchForm, code: value })} />
+                        <Field label="Telefono" value={branchForm.phone} onChange={(value) => setBranchForm({ ...branchForm, phone: value })} />
+                        <Field label="Direccion" value={branchForm.address} onChange={(value) => setBranchForm({ ...branchForm, address: value })} />
+                      </div>
+                      <div className="flex justify-end">
+                        <PrimaryButton>{editingBranchId ? 'Actualizar sucursal' : 'Guardar sucursal'}</PrimaryButton>
+                      </div>
+                    </form>
+                    <Table
+                      headers={['Sucursal', 'Codigo', 'Telefono', 'Acciones']}
+                      rows={data.branches.map((branch) => [
+                        branch.name,
+                        branch.code ?? '',
+                        branch.phone ?? '',
+                        <ActionButtons
+                          key={branch.id}
+                          onEdit={() => {
+                            setEditingBranchId(branch.id);
+                            setBranchForm({
+                              name: branch.name,
+                              code: branch.code ?? '',
+                              address: branch.address ?? '',
+                              phone: branch.phone ?? ''
+                            });
+                          }}
+                          onDeactivate={() => void deactivate(`/branches/${branch.id}`, { active: false })}
+                          disabled={!branch.active}
+                        />
+                      ])}
+                    />
+                  </EntitySection>
+                ) : null}
+                {activeLogisticsTab === 'warehouses' ? (
+                  <EntitySection title={editingWarehouseId ? 'Editar deposito' : 'Nuevo deposito'} tableTitle="Depositos registrados">
+                    <form onSubmit={(event) => submitForm(event, createWarehouse)} className="grid gap-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Nombre" value={warehouseForm.name} onChange={(value) => setWarehouseForm({ ...warehouseForm, name: value })} required />
+                        <Field label="Codigo" value={warehouseForm.code} onChange={(value) => setWarehouseForm({ ...warehouseForm, code: value })} />
+                        <Select label="Sucursal" value={warehouseForm.branchId} onChange={(value) => setWarehouseForm({ ...warehouseForm, branchId: value })} options={data.branches.map((branch) => [branch.id, branch.name])} />
+                        <Field label="Direccion" value={warehouseForm.address} onChange={(value) => setWarehouseForm({ ...warehouseForm, address: value })} />
+                      </div>
+                      <div className="flex justify-end">
+                        <PrimaryButton>{editingWarehouseId ? 'Actualizar deposito' : 'Guardar deposito'}</PrimaryButton>
+                      </div>
+                    </form>
+                    <Table
+                      headers={['Deposito', 'Sucursal', 'Codigo', 'Acciones']}
+                      rows={data.warehouses.map((warehouse) => [
+                        warehouse.name,
+                        warehouse.branch?.name ?? '',
+                        warehouse.code ?? '',
+                        <ActionButtons
+                          key={warehouse.id}
+                          onEdit={() => {
+                            setEditingWarehouseId(warehouse.id);
+                            setWarehouseForm({
+                              name: warehouse.name,
+                              code: warehouse.code ?? '',
+                              branchId: warehouse.branch?.id ?? '',
+                              address: warehouse.address ?? ''
+                            });
+                          }}
+                          onDeactivate={() => void deactivate(`/warehouses/${warehouse.id}`, { active: false })}
+                          disabled={!warehouse.active}
+                        />
+                      ])}
+                    />
+                  </EntitySection>
+                ) : null}
+                {activeLogisticsTab === 'vehicles' ? (
+                  <EntitySection title={editingVehicleId ? 'Editar vehiculo' : 'Nuevo vehiculo'} tableTitle="Vehiculos registrados">
+                    <form onSubmit={(event) => submitForm(event, createVehicle)} className="grid gap-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Patente" value={vehicleForm.plate} onChange={(value) => setVehicleForm({ ...vehicleForm, plate: value })} required />
+                        <Field label="Marca" value={vehicleForm.brand} onChange={(value) => setVehicleForm({ ...vehicleForm, brand: value })} />
+                        <Field label="Modelo" value={vehicleForm.model} onChange={(value) => setVehicleForm({ ...vehicleForm, model: value })} />
+                        <Field label="Anio" type="number" value={vehicleForm.year} onChange={(value) => setVehicleForm({ ...vehicleForm, year: value })} />
+                        <Field label="Capacidad" type="number" value={vehicleForm.capacity} onChange={(value) => setVehicleForm({ ...vehicleForm, capacity: value })} />
+                        <Select label="Estado" value={vehicleForm.status} onChange={(value) => setVehicleForm({ ...vehicleForm, status: value })} options={[['ACTIVE', 'Activo'], ['MAINTENANCE', 'Mantenimiento'], ['INACTIVE', 'Inactivo']]} />
+                      </div>
+                      <div className="flex justify-end">
+                        <PrimaryButton>{editingVehicleId ? 'Actualizar vehiculo' : 'Guardar vehiculo'}</PrimaryButton>
+                      </div>
+                    </form>
+                    <Table
+                      headers={['Patente', 'Marca', 'Modelo', 'Estado', 'Acciones']}
+                      rows={data.vehicles.map((vehicle) => [
+                        vehicle.plate,
+                        vehicle.brand ?? '',
+                        vehicle.model ?? '',
+                        vehicle.status,
+                        <ActionButtons
+                          key={vehicle.id}
+                          onEdit={() => {
+                            setEditingVehicleId(vehicle.id);
+                            setVehicleForm({
+                              plate: vehicle.plate,
+                              brand: vehicle.brand ?? '',
+                              model: vehicle.model ?? '',
+                              year: vehicle.year ? String(vehicle.year) : '',
+                              capacity: vehicle.capacity ?? '',
+                              status: vehicle.status
+                            });
+                          }}
+                          onDeactivate={() => void deactivate(`/vehicles/${vehicle.id}`, { status: 'INACTIVE' })}
+                          disabled={vehicle.status !== 'ACTIVE'}
+                        />
+                      ])}
+                    />
+                  </EntitySection>
+                ) : null}
+                {activeLogisticsTab === 'drivers' ? (
+                  <EntitySection title="Nuevo chofer" tableTitle="Choferes registrados">
+                    <form onSubmit={(event) => submitForm(event, createDriver)} className="grid gap-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Select label="Usuario" value={driverForm.userId} onChange={(value) => setDriverForm({ ...driverForm, userId: value })} options={data.users.map((user) => [user.id, `${user.firstName} ${user.lastName}`])} required />
+                        <Field label="Licencia" value={driverForm.licenseNumber} onChange={(value) => setDriverForm({ ...driverForm, licenseNumber: value })} />
+                        <Field label="Categoria" value={driverForm.licenseCategory} onChange={(value) => setDriverForm({ ...driverForm, licenseCategory: value })} />
+                        <Select label="Estado" value={driverForm.status} onChange={(value) => setDriverForm({ ...driverForm, status: value })} options={[['ACTIVE', 'Activo'], ['INACTIVE', 'Inactivo']]} />
+                      </div>
+                      <div className="flex justify-end">
+                        <PrimaryButton>Guardar chofer</PrimaryButton>
+                      </div>
+                    </form>
+                    <Table headers={['Chofer', 'Licencia', 'Estado']} rows={data.drivers.map((driver) => [`${driver.user.firstName} ${driver.user.lastName}`, driver.licenseNumber ?? '', driver.status])} />
+                  </EntitySection>
+                ) : null}
+                {activeLogisticsTab === 'routes' ? (
+                  <EntitySection title={editingRouteId ? 'Editar ruta de reparto' : 'Nueva ruta de reparto'} tableTitle="Rutas registradas">
+                    <form onSubmit={(event) => submitForm(event, createDeliveryRoute)} className="grid gap-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Nombre" value={routeForm.name} onChange={(value) => setRouteForm({ ...routeForm, name: value })} required />
+                        <Field label="Fecha" type="date" value={routeForm.routeDate} onChange={(value) => setRouteForm({ ...routeForm, routeDate: value })} required />
+                        <Select label="Deposito" value={routeForm.warehouseId} onChange={(value) => setRouteForm({ ...routeForm, warehouseId: value })} options={data.warehouses.map((warehouse) => [warehouse.id, warehouse.name])} required />
+                        <Select label="Chofer" value={routeForm.driverId} onChange={(value) => setRouteForm({ ...routeForm, driverId: value })} options={data.drivers.map((driver) => [driver.id, `${driver.user.firstName} ${driver.user.lastName}`])} required />
+                        <Select label="Vehiculo" value={routeForm.vehicleId} onChange={(value) => setRouteForm({ ...routeForm, vehicleId: value })} options={data.vehicles.map((vehicle) => [vehicle.id, vehicle.plate])} required />
+                        <TextArea label="Notas" value={routeForm.notes} onChange={(value) => setRouteForm({ ...routeForm, notes: value })} className="sm:col-span-2" />
+                      </div>
+                      <div className="border border-border bg-slate-50 p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-slate-700">Pedidos confirmados</p>
+                          <span className="text-xs text-slate-500">{routeForm.orderIds.length} seleccionados</span>
+                        </div>
+                        <Table
+                          headers={['Asignar', 'Cliente', 'Estado', 'Total', 'Direccion']}
+                          rows={routeCandidateOrders.map((order) => [
+                            <input
+                              key={order.id}
+                              type="checkbox"
+                              checked={routeForm.orderIds.includes(order.id)}
+                              onChange={(event) => toggleRouteOrder(order.id, event.target.checked)}
+                              className="h-4 w-4 accent-primary"
+                            />,
+                            customerName(order.customer),
+                            orderStatusLabel(order.status),
+                            order.total,
+                            order.deliveryStreet ?? ''
+                          ])}
+                        />
+                        {!canCreateRoute ? (
+                          <p className="mt-3 text-sm font-medium text-amber-700">{routeCreationMessage}</p>
+                        ) : null}
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        {editingRouteId ? (
+                          <button
+                            type="button"
+                            onClick={resetRouteForm}
+                            className="h-10 border border-border bg-white px-4 text-sm font-semibold hover:border-primary"
+                          >
+                            Cancelar edicion
+                          </button>
+                        ) : null}
+                        <PrimaryButton disabled={!canCreateRoute}>
+                          {editingRouteId ? 'Actualizar ruta y pedidos' : 'Crear ruta y asignar pedidos'}
+                        </PrimaryButton>
+                      </div>
+                    </form>
+                    <div className="min-w-0">
+                      <Table
+                        headers={['Ruta', 'Fecha', 'Chofer', 'Vehiculo', 'Estado', 'Paradas', 'Cobros', 'Facturas', 'Acciones']}
+                        rows={data.deliveryRoutes.map((route) => [
+                          route.name,
+                          route.routeDate.slice(0, 10),
+                          `${route.driver.user.firstName} ${route.driver.user.lastName}`,
+                          route.vehicle.plate,
+                          routeStatusLabel(route.status),
+                          <RouteStopsSummary key={`${route.id}-stops`} route={route} />,
+                          <RoutePaymentsSummary key={`${route.id}-payments`} route={route} />,
+                          <RouteInvoicesSummary key={`${route.id}-invoices`} route={route} />,
+                          <RouteActions
+                            key={route.id}
+                            route={route}
+                            onView={() => setSelectedRouteId(route.id)}
+                            onEdit={() => editDeliveryRoute(route)}
+                            onPrepare={() => void runRouteAction(route.id, 'prepare')}
+                            onLoad={() => void runRouteAction(route.id, 'load-vehicle')}
+                            onClose={() => void runRouteAction(route.id, 'close-preliminary')}
+                            onCancel={() => void runRouteAction(route.id, 'cancel')}
+                          />
+                        ])}
+                      />
+                      {selectedRouteId ? <RouteDetailPanel route={data.deliveryRoutes.find((route) => route.id === selectedRouteId) ?? null} onClose={() => setSelectedRouteId(null)} /> : null}
+                    </div>
+                  </EntitySection>
+                ) : null}
+              </div>
+            </Panel>
+          </div>
+        );
+      }
       case 'ventas':
         return (
           <div className="grid gap-4 xl:grid-cols-[minmax(0,520px)_1fr]">
@@ -1507,6 +1887,11 @@ export function Dashboard({
                   <Field label="Provincia" value={orderForm.deliveryProvince} onChange={(value) => setOrderForm({ ...orderForm, deliveryProvince: value })} />
                   <Field label="Referencia" value={orderForm.deliveryReference} onChange={(value) => setOrderForm({ ...orderForm, deliveryReference: value })} />
                 </div>
+                {orderForm.customerId && !selectedOrderCustomerAddress ? (
+                  <p className="text-sm font-medium text-amber-700">
+                    Este cliente no tiene direccion cargada. Completa la direccion para este pedido o actualiza la ficha del cliente.
+                  </p>
+                ) : null}
                 <div className="border border-border bg-slate-50 p-3">
                   <div className="grid gap-3 sm:grid-cols-[1fr_90px_120px_auto]">
                     <Select label="Producto" value={orderForm.productId} onChange={updateOrderProduct} options={data.products.map((product) => [product.id, product.name])} />
@@ -1653,6 +2038,269 @@ export function Dashboard({
             </div>
           </div>
         );
+      case 'activos': {
+        const assetTabs: TabItem<AssetsTabKey>[] = [
+          { key: 'containers', label: 'Envases', icon: <Boxes size={16} />, count: data.containerTypes.length },
+          { key: 'movements', label: 'Movimientos', icon: <FileText size={16} />, count: data.containerMovements.length },
+          { key: 'balances', label: 'Saldos', icon: <Users size={16} />, count: data.containerBalances.length },
+          { key: 'equipment', label: 'Equipos', icon: <Package size={16} />, count: data.dispensers.length },
+          { key: 'models', label: 'Modelos', icon: <Settings size={16} />, count: data.dispenserModels.length },
+          { key: 'loans', label: 'Comodatos', icon: <FileText size={16} />, count: data.dispenserComodatos.length }
+        ];
+        const activeComodatoDispenserIds = new Set(
+          data.dispenserComodatos
+            .filter((comodato) => comodato.status === 'ACTIVE')
+            .map((comodato) => comodato.dispenser.id)
+        );
+        const availableDispensers = data.dispensers.filter(
+          (dispenser) =>
+            !activeComodatoDispenserIds.has(dispenser.id) &&
+            dispenser.status !== 'MAINTENANCE' &&
+            dispenser.status !== 'RETIRED'
+        );
+
+        return (
+          <div className="grid gap-4">
+            <Panel title="Activos retornables y comodatos" icon={<Boxes size={18} />}>
+              <AdminTabs tabs={assetTabs} activeKey={activeAssetsTab} onChange={setActiveAssetsTab} />
+              <div className="mt-5">
+                {activeAssetsTab === 'containers' ? (
+                  <EntitySection title={editingContainerTypeId ? 'Editar tipo de envase' : 'Nuevo tipo de envase'} tableTitle="Tipos de envase cargados">
+                    <form onSubmit={(event) => submitForm(event, createContainerType)} className="grid gap-4">
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <Field label="Nombre" value={containerTypeForm.name} onChange={(value) => setContainerTypeForm({ ...containerTypeForm, name: value })} required />
+                        <Field label="Codigo" value={containerTypeForm.code} onChange={(value) => setContainerTypeForm({ ...containerTypeForm, code: value })} />
+                        <Field label="Capacidad" type="number" value={containerTypeForm.capacity} onChange={(value) => setContainerTypeForm({ ...containerTypeForm, capacity: value })} />
+                      </div>
+                      <div className="flex justify-end">
+                        {editingContainerTypeId ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingContainerTypeId(null);
+                              setContainerTypeForm({ name: '', code: '', capacity: '' });
+                            }}
+                            className="h-10 border border-border bg-white px-4 text-sm font-semibold hover:border-primary"
+                          >
+                            Cancelar edicion
+                          </button>
+                        ) : null}
+                        <PrimaryButton>{editingContainerTypeId ? 'Actualizar envase' : 'Guardar envase'}</PrimaryButton>
+                      </div>
+                    </form>
+                    <Table
+                      headers={['Envase', 'Codigo', 'Capacidad', 'Estado', 'Acciones']}
+                      rows={data.containerTypes.map((type) => [
+                        type.name,
+                        type.code ?? '',
+                        type.capacity ?? '',
+                        type.active ? 'Activo' : 'Inactivo',
+                        <ActionButtons
+                          key={type.id}
+                          onEdit={() => {
+                            setEditingContainerTypeId(type.id);
+                            setContainerTypeForm({ name: type.name, code: type.code ?? '', capacity: type.capacity ? String(type.capacity) : '' });
+                          }}
+                          onDeactivate={() => void deactivateContainerType(type.id)}
+                          disabled={!type.active}
+                        />
+                      ])}
+                    />
+                  </EntitySection>
+                ) : null}
+                {activeAssetsTab === 'movements' ? (
+                  <EntitySection title="Registrar movimiento de envases" tableTitle="Ultimos movimientos">
+                    <form onSubmit={(event) => submitForm(event, createContainerMovement)} className="grid gap-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Select label="Cliente" value={containerMovementForm.customerId} onChange={(value) => setContainerMovementForm({ ...containerMovementForm, customerId: value })} options={data.customers.map((customer) => [customer.id, customerName(customer)])} required />
+                        <Select label="Envase" value={containerMovementForm.containerTypeId} onChange={(value) => setContainerMovementForm({ ...containerMovementForm, containerTypeId: value })} options={data.containerTypes.map((type) => [type.id, type.name])} required />
+                        <Select label="Tipo" value={containerMovementForm.type} onChange={(value) => setContainerMovementForm({ ...containerMovementForm, type: value })} options={[['DELIVERED', 'Entregado al cliente'], ['RETURNED', 'Recuperado del cliente'], ['ADJUSTMENT', 'Ajuste manual']]} required />
+                        <Field label="Cantidad" type="number" value={containerMovementForm.quantity} onChange={(value) => setContainerMovementForm({ ...containerMovementForm, quantity: value })} required />
+                        <Field label="Referencia" value={containerMovementForm.reference} onChange={(value) => setContainerMovementForm({ ...containerMovementForm, reference: value })} />
+                        <Field label="Notas" value={containerMovementForm.notes} onChange={(value) => setContainerMovementForm({ ...containerMovementForm, notes: value })} />
+                      </div>
+                      <div className="flex justify-end">
+                        <PrimaryButton>Guardar movimiento</PrimaryButton>
+                      </div>
+                    </form>
+                    <Table
+                      headers={['Fecha', 'Cliente', 'Envase', 'Tipo', 'Cantidad', 'Referencia']}
+                      rows={data.containerMovements.map((movement) => [
+                        movement.createdAt?.slice(0, 10) ?? '',
+                        customerName(movement.customer),
+                        movement.containerType.name,
+                        containerMovementLabel(movement.type),
+                        String(movement.quantity),
+                        movement.reference ?? ''
+                      ])}
+                    />
+                  </EntitySection>
+                ) : null}
+                {activeAssetsTab === 'balances' ? (
+                  <EntitySection title="Envases en poder de clientes" tableTitle="Saldos por cliente">
+                    <div className="border border-border bg-slate-50 p-3 text-sm text-slate-600">
+                      Saldo positivo significa envases en poder del cliente.
+                    </div>
+                    <Table
+                      headers={['Cliente', 'Envase', 'Saldo']}
+                      rows={data.containerBalances.map((balance) => [customerName(balance.customer), balance.containerType.name, String(balance.balance)])}
+                    />
+                  </EntitySection>
+                ) : null}
+                {activeAssetsTab === 'equipment' ? (
+                  <EntitySection title={editingDispenserId ? 'Editar equipo / dispenser' : 'Nuevo equipo / dispenser'} tableTitle="Equipos registrados">
+                    <form onSubmit={(event) => submitForm(event, createDispenser)} className="grid gap-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Select label="Modelo" value={dispenserForm.modelId} onChange={(value) => setDispenserForm({ ...dispenserForm, modelId: value })} options={data.dispenserModels.map((model) => [model.id, model.name])} required />
+                        <Field label="Numero de serie" value={dispenserForm.serialNumber} onChange={(value) => setDispenserForm({ ...dispenserForm, serialNumber: value })} required />
+                        <Field label="Fecha compra" type="date" value={dispenserForm.acquiredAt} onChange={(value) => setDispenserForm({ ...dispenserForm, acquiredAt: value })} />
+                        <Field label="Notas" value={dispenserForm.notes} onChange={(value) => setDispenserForm({ ...dispenserForm, notes: value })} />
+                      </div>
+                      <div className="flex justify-end">
+                        {editingDispenserId ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingDispenserId(null);
+                              setDispenserForm((current) => ({ modelId: current.modelId, serialNumber: '', acquiredAt: '', notes: '' }));
+                            }}
+                            className="h-10 border border-border bg-white px-4 text-sm font-semibold hover:border-primary"
+                          >
+                            Cancelar edicion
+                          </button>
+                        ) : null}
+                        <PrimaryButton>{editingDispenserId ? 'Actualizar equipo' : 'Guardar equipo'}</PrimaryButton>
+                      </div>
+                    </form>
+                    <Table
+                      headers={['Serie', 'Modelo', 'Estado', 'Cliente actual', 'Acciones']}
+                      rows={data.dispensers.map((dispenser) => [
+                        dispenser.serialNumber,
+                        dispenser.model.name,
+                        dispenserStatusLabel(dispenser.status),
+                        dispenser.currentCustomer ? customerName(dispenser.currentCustomer) : '',
+                        <div key={dispenser.id} className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingDispenserId(dispenser.id);
+                              setDispenserForm({
+                                modelId: dispenser.model.id,
+                                serialNumber: dispenser.serialNumber,
+                                acquiredAt: '',
+                                notes: ''
+                              });
+                            }}
+                            className="border border-border px-2 py-1 text-xs font-semibold hover:border-primary"
+                          >
+                            Editar
+                          </button>
+                          {dispenser.status !== 'RETIRED' ? (
+                            <button
+                              type="button"
+                              onClick={() => void retireDispenser(dispenser.id)}
+                              disabled={dispenser.status === 'ON_LOAN'}
+                              className="border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:border-red-500 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                            >
+                              Dar de baja
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void reactivateDispenser(dispenser.id)}
+                              className="border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:border-emerald-500"
+                            >
+                              Reactivar
+                            </button>
+                          )}
+                        </div>
+                      ])}
+                    />
+                  </EntitySection>
+                ) : null}
+                {activeAssetsTab === 'models' ? (
+                  <EntitySection title={editingDispenserModelId ? 'Editar modelo de equipo' : 'Nuevo modelo de equipo'} tableTitle="Modelos cargados">
+                    <form onSubmit={(event) => submitForm(event, createDispenserModel)} className="grid gap-4">
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <Field label="Nombre" value={dispenserModelForm.name} onChange={(value) => setDispenserModelForm({ ...dispenserModelForm, name: value })} required />
+                        <Field label="Codigo" value={dispenserModelForm.code} onChange={(value) => setDispenserModelForm({ ...dispenserModelForm, code: value })} />
+                        <Field label="Capacidad" type="number" value={dispenserModelForm.capacity} onChange={(value) => setDispenserModelForm({ ...dispenserModelForm, capacity: value })} />
+                      </div>
+                      <div className="flex justify-end">
+                        {editingDispenserModelId ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingDispenserModelId(null);
+                              setDispenserModelForm({ name: '', code: '', capacity: '' });
+                            }}
+                            className="h-10 border border-border bg-white px-4 text-sm font-semibold hover:border-primary"
+                          >
+                            Cancelar edicion
+                          </button>
+                        ) : null}
+                        <PrimaryButton>{editingDispenserModelId ? 'Actualizar modelo' : 'Guardar modelo'}</PrimaryButton>
+                      </div>
+                    </form>
+                    <Table
+                      headers={['Modelo', 'Codigo', 'Capacidad', 'Estado', 'Acciones']}
+                      rows={data.dispenserModels.map((model) => [
+                        model.name,
+                        model.code ?? '',
+                        model.capacity ?? '',
+                        model.active ? 'Activo' : 'Inactivo',
+                        <ActionButtons
+                          key={model.id}
+                          onEdit={() => {
+                            setEditingDispenserModelId(model.id);
+                            setDispenserModelForm({ name: model.name, code: model.code ?? '', capacity: model.capacity ? String(model.capacity) : '' });
+                          }}
+                          onDeactivate={() => void deactivateDispenserModel(model.id)}
+                          disabled={!model.active}
+                        />
+                      ])}
+                    />
+                  </EntitySection>
+                ) : null}
+                {activeAssetsTab === 'loans' ? (
+                  <EntitySection title="Nuevo comodato" tableTitle="Comodatos registrados">
+                    <form onSubmit={(event) => submitForm(event, createDispenserComodato)} className="grid gap-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Select label="Equipo disponible" value={dispenserComodatoForm.dispenserId} onChange={(value) => setDispenserComodatoForm({ ...dispenserComodatoForm, dispenserId: value })} options={availableDispensers.map((dispenser) => [dispenser.id, `${dispenser.serialNumber} - ${dispenser.model.name}`])} required />
+                        <Select label="Cliente" value={dispenserComodatoForm.customerId} onChange={(value) => setDispenserComodatoForm({ ...dispenserComodatoForm, customerId: value })} options={data.customers.map((customer) => [customer.id, customerName(customer)])} required />
+                        <Field label="Fecha entrega" type="date" value={dispenserComodatoForm.deliveredAt} onChange={(value) => setDispenserComodatoForm({ ...dispenserComodatoForm, deliveredAt: value })} />
+                        <Field label="Deposito garantia" type="number" value={dispenserComodatoForm.depositAmount} onChange={(value) => setDispenserComodatoForm({ ...dispenserComodatoForm, depositAmount: value })} />
+                        <Field label="Notas" value={dispenserComodatoForm.notes} onChange={(value) => setDispenserComodatoForm({ ...dispenserComodatoForm, notes: value })} />
+                      </div>
+                      {!availableDispensers.length ? <p className="text-sm font-medium text-amber-700">No hay equipos disponibles para comodato.</p> : null}
+                      <div className="flex justify-end">
+                        <PrimaryButton disabled={!availableDispensers.length}>Guardar comodato</PrimaryButton>
+                      </div>
+                    </form>
+                    <Table
+                      headers={['Equipo', 'Cliente', 'Entrega', 'Estado', 'Garantia', 'Acciones']}
+                      rows={data.dispenserComodatos.map((comodato) => [
+                        `${comodato.dispenser.serialNumber} - ${comodato.dispenser.model.name}`,
+                        customerName(comodato.customer),
+                        comodato.deliveredAt.slice(0, 10),
+                        comodatoStatusLabel(comodato.status),
+                        comodato.depositAmount ?? '',
+                        comodato.status === 'ACTIVE' ? (
+                          <button key={comodato.id} type="button" onClick={() => void retireDispenserComodato(comodato)} className="border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:border-emerald-500">
+                            Registrar devolucion
+                          </button>
+                        ) : (
+                          ''
+                        )
+                      ])}
+                    />
+                  </EntitySection>
+                ) : null}
+              </div>
+            </Panel>
+          </div>
+        );
+      }
       case 'admin':
         return (
           <div className="grid gap-4 xl:grid-cols-2">
@@ -1840,6 +2488,15 @@ function customerName(customer: Customer): string {
   return customer.businessName ?? (`${customer.firstName ?? ''} ${customer.lastName ?? ''}`.trim() || 'Sin nombre');
 }
 
+function customerAddressLabel(customer: Customer): string {
+  const address = customer.addresses?.[0];
+  if (!address) return '';
+
+  return [address.street, address.city, address.province, address.reference ? `Ref: ${address.reference}` : '']
+    .filter(Boolean)
+    .join(' - ');
+}
+
 function slugFromName(value: string): string {
   return value
     .normalize('NFD')
@@ -1948,6 +2605,34 @@ function paymentMethodLabel(method: string): string {
   return labels[method] ?? method;
 }
 
+function containerMovementLabel(type: string): string {
+  const labels: Record<string, string> = {
+    DELIVERED: 'Entregado',
+    RETURNED: 'Recuperado',
+    ADJUSTMENT: 'Ajuste'
+  };
+  return labels[type] ?? type;
+}
+
+function dispenserStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    AVAILABLE: 'Disponible',
+    ON_LOAN: 'En comodato',
+    MAINTENANCE: 'Mantenimiento',
+    RETIRED: 'Retirado'
+  };
+  return labels[status] ?? status;
+}
+
+function comodatoStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    ACTIVE: 'Activo',
+    RETURNED: 'Devuelto',
+    CANCELLED: 'Cancelado'
+  };
+  return labels[status] ?? status;
+}
+
 function Field({ label, value, onChange, placeholder, type = 'text', required }: FieldProps) {
   return (
     <label className="grid gap-1.5 text-sm">
@@ -2043,9 +2728,12 @@ function Check({
   );
 }
 
-function PrimaryButton({ children }: { children: React.ReactNode }) {
+function PrimaryButton({ children, disabled = false }: { children: React.ReactNode; disabled?: boolean }) {
   return (
-    <button className="h-10 bg-primary px-4 text-sm font-semibold text-white hover:bg-cyan-800">
+    <button
+      disabled={disabled}
+      className="h-10 bg-primary px-4 text-sm font-semibold text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:hover:bg-slate-300"
+    >
       {children}
     </button>
   );
@@ -2116,6 +2804,7 @@ function OrderActions({
 function RouteActions({
   route,
   onView,
+  onEdit,
   onPrepare,
   onLoad,
   onClose,
@@ -2123,6 +2812,7 @@ function RouteActions({
 }: {
   route: DeliveryRoute;
   onView: () => void;
+  onEdit: () => void;
   onPrepare: () => void;
   onLoad: () => void;
   onClose: () => void;
@@ -2133,6 +2823,11 @@ function RouteActions({
       <button type="button" onClick={onView} className="border border-border px-2 py-1 text-xs font-semibold hover:border-primary">
         Ver
       </button>
+      {route.status === 'DRAFT' ? (
+        <button type="button" onClick={onEdit} className="border border-border px-2 py-1 text-xs font-semibold hover:border-primary">
+          Editar
+        </button>
+      ) : null}
       {route.status === 'DRAFT' ? (
         <button type="button" onClick={onPrepare} className="border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:border-emerald-500">
           Preparar
@@ -2302,6 +2997,80 @@ function Panel({
       </div>
       {children}
     </section>
+  );
+}
+
+function AdminTabs<TKey extends string>({
+  tabs,
+  activeKey,
+  onChange
+}: {
+  tabs: TabItem<TKey>[];
+  activeKey: TKey;
+  onChange: (key: TKey) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2 border-b border-border pb-3" role="tablist">
+      {tabs.map((tab) => {
+        const active = tab.key === activeKey;
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(tab.key)}
+            className={`inline-flex h-10 items-center gap-2 border px-3 text-sm font-semibold ${
+              active
+                ? 'border-primary bg-cyan-50 text-primary'
+                : 'border-border bg-white text-slate-600 hover:border-primary hover:text-primary'
+            }`}
+          >
+            <span>{tab.icon}</span>
+            <span>{tab.label}</span>
+            {typeof tab.count === 'number' ? (
+              <span className={`min-w-6 px-1.5 py-0.5 text-center text-xs ${active ? 'bg-white text-primary' : 'bg-slate-100 text-slate-500'}`}>
+                {tab.count}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <fieldset className="grid gap-3 border-t border-border pt-4 first:border-t-0 first:pt-0">
+      <legend className="mb-1 text-sm font-semibold text-slate-800">{title}</legend>
+      <div className="grid gap-3 sm:grid-cols-2">{children}</div>
+    </fieldset>
+  );
+}
+
+function EntitySection({
+  title,
+  tableTitle,
+  children
+}: {
+  title: string;
+  tableTitle: string;
+  children: [React.ReactNode, React.ReactNode];
+}) {
+  const [form, table] = children;
+
+  return (
+    <div className="grid gap-5">
+      <div>
+        <h3 className="mb-3 text-sm font-semibold text-slate-800">{title}</h3>
+        {form}
+      </div>
+      <div className="border-t border-border pt-4">
+        <h3 className="mb-2 text-sm font-semibold text-slate-800">{tableTitle}</h3>
+        {table}
+      </div>
+    </div>
   );
 }
 

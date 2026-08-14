@@ -3,6 +3,7 @@ import { ContainerMovementType, Prisma } from '@prisma/client';
 import { CreateContainerMovementDto } from './dto/create-container-movement.dto.js';
 import { CreateContainerTypeDto } from './dto/create-container-type.dto.js';
 import { ContainersQueryDto } from './dto/containers-query.dto.js';
+import { UpdateContainerTypeDto } from './dto/update-container-type.dto.js';
 import { pageArgs } from '../commercial/dto/list-query.dto.js';
 import { requireTenant } from '../commercial/tenant-scope.js';
 import { AuthenticatedUser } from '../common/authenticated-user.js';
@@ -29,6 +30,23 @@ export class ContainersService {
       data: { tenantId, name: dto.name.trim(), code: dto.code?.trim(), capacity: dto.capacity, active: dto.active }
     });
     await this.audit.log({ tenantId, userId: user.id, action: 'containers.types.create', entity: 'ContainerType', entityId: type.id, newValues: { name: type.name } });
+    return type;
+  }
+
+  async updateType(id: string, dto: UpdateContainerTypeDto, user: AuthenticatedUser) {
+    const tenantId = requireTenant(user);
+    const current = await this.prisma.containerType.findFirst({ where: { id, tenantId } });
+    if (!current) throw new ForbiddenException('Container type does not belong to this tenant');
+    const type = await this.prisma.containerType.update({
+      where: { id },
+      data: {
+        name: dto.name?.trim(),
+        code: dto.code?.trim(),
+        capacity: dto.capacity,
+        active: dto.active
+      }
+    });
+    await this.audit.log({ tenantId, userId: user.id, action: 'containers.types.update', entity: 'ContainerType', entityId: id, oldValues: { active: current.active }, newValues: { active: type.active, name: type.name } });
     return type;
   }
 
