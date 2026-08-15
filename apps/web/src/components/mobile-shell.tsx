@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, CloudUpload, CreditCard, LogOut, MapPin, Plus, RefreshCw, Search, ShoppingCart, Trash2, UserPlus, X } from 'lucide-react';
 import { apiRequest, AuthResponse, Customer, DriverMobileRoute, DriverMobileStop, Invoice, Product } from '../lib/api';
 import { LoginForm } from './login-form';
@@ -59,7 +59,17 @@ type MobileDebt = {
 
 type PaymentChoice = 'FULL' | 'PARTIAL' | 'NONE';
 
+function readStoredSession(): AuthResponse | null {
+  try {
+    const stored = window.localStorage.getItem(storageKey);
+    return stored ? (JSON.parse(stored) as AuthResponse) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function MobileShell() {
+  const refreshPromiseRef = useRef<Promise<AuthResponse> | null>(null);
   const [session, setSession] = useState<AuthResponse | null>(null);
   const [routes, setRoutes] = useState<DriverMobileRoute[]>([]);
   const [catalog, setCatalog] = useState<MobileCatalog>({ customers: [], products: [] });
@@ -87,9 +97,9 @@ export function MobileShell() {
   const [queue, setQueue] = useState<QueuedOperation[]>([]);
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(storageKey);
+    const storedSession = readStoredSession();
     const queued = window.localStorage.getItem(queueKey);
-    if (stored) setSession(JSON.parse(stored) as AuthResponse);
+    if (storedSession) setSession(storedSession);
     if (queued) setQueue(JSON.parse(queued) as QueuedOperation[]);
   }, []);
 
@@ -134,6 +144,43 @@ export function MobileShell() {
     setSelectedStop(null);
   }
 
+  function persistSession(nextSession: AuthResponse) {
+    window.localStorage.setItem(storageKey, JSON.stringify(nextSession));
+    setSession(nextSession);
+    return nextSession;
+  }
+
+  async function refreshSession(activeSession = session): Promise<AuthResponse> {
+    if (!activeSession) throw new Error('Sesion no disponible');
+    if (!refreshPromiseRef.current) {
+      refreshPromiseRef.current = apiRequest<AuthResponse>('/auth/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken: activeSession.refreshToken })
+      })
+        .then(persistSession)
+        .finally(() => {
+          refreshPromiseRef.current = null;
+        });
+    }
+    return refreshPromiseRef.current;
+  }
+
+  async function requestWithSession<T>(path: string, options: RequestInit = {}, activeSession = session): Promise<T> {
+    if (!activeSession) throw new Error('Sesion no disponible');
+    try {
+      return await apiRequest<T>(path, { ...options, token: activeSession.accessToken });
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : '';
+      if (!isAuthError(message)) throw requestError;
+      const storedSession = readStoredSession();
+      if (storedSession && storedSession.refreshToken !== activeSession.refreshToken) {
+        return apiRequest<T>(path, { ...options, token: storedSession.accessToken });
+      }
+      const nextSession = await refreshSession(activeSession);
+      return apiRequest<T>(path, { ...options, token: nextSession.accessToken });
+    }
+  }
+
   function persistQueue(nextQueue: QueuedOperation[]) {
     setQueue(nextQueue);
     window.localStorage.setItem(queueKey, JSON.stringify(nextQueue));
@@ -145,8 +192,8 @@ export function MobileShell() {
     setError(null);
     try {
       const [nextRoutes, nextCatalog] = await Promise.all([
-        apiRequest<DriverMobileRoute[]>('/driver-mobile/routes', { token: activeSession.accessToken }),
-        apiRequest<MobileCatalog>('/driver-mobile/catalog', { token: activeSession.accessToken })
+        requestWithSession<DriverMobileRoute[]>('/driver-mobile/routes', {}, activeSession),
+        requestWithSession<MobileCatalog>('/driver-mobile/catalog', {}, activeSession)
       ]);
       setRoutes(nextRoutes);
       setCatalog(nextCatalog);
@@ -287,9 +334,8 @@ export function MobileShell() {
     setCreatingSale(true);
     try {
       const path = newSale.routeId ? `/driver-mobile/routes/${newSale.routeId}/sales` : '/driver-mobile/quick-sales';
-      await apiRequest(path, {
+      await requestWithSession(path, {
         method: 'POST',
-        token: session.accessToken,
         body: JSON.stringify({
           customerId: newSale.customerId,
           notes: newSale.notes || 'Venta nueva en ruta',
@@ -322,9 +368,8 @@ export function MobileShell() {
     setError(null);
     setCreatingCustomer(true);
     try {
-      const customer = await apiRequest<Customer>('/driver-mobile/customers', {
+      const customer = await requestWithSession<Customer>('/driver-mobile/customers', {
         method: 'POST',
-        token: session.accessToken,
         body: JSON.stringify({
           name: quickCustomer.name,
           phone: quickCustomer.phone || undefined,
@@ -349,7 +394,7 @@ export function MobileShell() {
     if (!session || !customerId) return;
     setError(null);
     try {
-      const nextDebt = await apiRequest<MobileDebt>(`/driver-mobile/customers/${customerId}/debt`, { token: session.accessToken });
+      const nextDebt = await requestWithSession<MobileDebt>(`/driver-mobile/customers/${customerId}/debt`);
       setDebt(nextDebt);
       setMobilePayment((current) => ({ ...current, customerId, amount: current.amount || (nextDebt.balance > 0 ? formatAmount(nextDebt.balance) : '') }));
     } catch (requestError) {
@@ -370,9 +415,8 @@ export function MobileShell() {
     setError(null);
     setCreatingPayment(true);
     try {
-      await apiRequest('/driver-mobile/payments', {
+      await requestWithSession('/driver-mobile/payments', {
         method: 'POST',
-        token: session.accessToken,
         body: JSON.stringify({
           customerId: mobilePayment.customerId,
           amount: Number(mobilePayment.amount),
@@ -394,7 +438,7 @@ export function MobileShell() {
   async function sendOrQueue(operation: QueuedOperation, path: string, body: object) {
     if (!session) return;
     try {
-      await apiRequest(path, { method: 'POST', token: session.accessToken, body: JSON.stringify(body) });
+      await requestWithSession(path, { method: 'POST', body: JSON.stringify(body) });
       await loadMobileData();
     } catch (requestError) {
       persistQueue([...queue, operation]);
@@ -411,9 +455,8 @@ export function MobileShell() {
     if (!session || !queue.length) return;
     setError(null);
     try {
-      await apiRequest('/driver-mobile/sync', {
+      await requestWithSession('/driver-mobile/sync', {
         method: 'POST',
-        token: session.accessToken,
         body: JSON.stringify({ operations: queue })
       });
       persistQueue([]);
