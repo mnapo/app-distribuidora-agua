@@ -95,6 +95,7 @@ export function MobileShell() {
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [creatingPayment, setCreatingPayment] = useState(false);
   const [queue, setQueue] = useState<QueuedOperation[]>([]);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
 
   useEffect(() => {
     const storedSession = readStoredSession();
@@ -105,6 +106,26 @@ export function MobileShell() {
 
   useEffect(() => {
     if (session) void loadMobileData(session);
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    function refreshWhenVisible() {
+      if (document.visibilityState === 'visible') void loadMobileData();
+    }
+
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    window.addEventListener('focus', refreshWhenVisible);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadMobileData();
+    }, 60_000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      window.removeEventListener('focus', refreshWhenVisible);
+      window.clearInterval(interval);
+    };
   }, [session]);
 
   const visibleCustomers = useMemo(() => {
@@ -167,17 +188,18 @@ export function MobileShell() {
 
   async function requestWithSession<T>(path: string, options: RequestInit = {}, activeSession = session): Promise<T> {
     if (!activeSession) throw new Error('Sesion no disponible');
+    const requestOptions: RequestInit = { cache: 'no-store', ...options };
     try {
-      return await apiRequest<T>(path, { ...options, token: activeSession.accessToken });
+      return await apiRequest<T>(path, { ...requestOptions, token: activeSession.accessToken });
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : '';
       if (!isAuthError(message)) throw requestError;
       const storedSession = readStoredSession();
       if (storedSession && storedSession.refreshToken !== activeSession.refreshToken) {
-        return apiRequest<T>(path, { ...options, token: storedSession.accessToken });
+        return apiRequest<T>(path, { ...requestOptions, token: storedSession.accessToken });
       }
       const nextSession = await refreshSession(activeSession);
-      return apiRequest<T>(path, { ...options, token: nextSession.accessToken });
+      return apiRequest<T>(path, { ...requestOptions, token: nextSession.accessToken });
     }
   }
 
@@ -198,6 +220,7 @@ export function MobileShell() {
       setRoutes(nextRoutes);
       setCatalog(nextCatalog);
       setNewSale((current) => ({ ...current, routeId: current.routeId || nextRoutes[0]?.id || '' }));
+      setLastUpdatedAt(new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }));
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'No se pudieron cargar datos');
     } finally {
@@ -543,13 +566,17 @@ export function MobileShell() {
         <div className="grid grid-cols-3 gap-2">
           <button onClick={() => void loadMobileData()} className="inline-flex h-11 items-center justify-center gap-2 border border-border bg-white text-sm font-semibold">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Rutas
+            Actualizar
           </button>
           <button onClick={() => void syncQueue()} className="col-span-2 inline-flex h-11 items-center justify-center gap-2 bg-primary text-sm font-semibold text-white">
             <CloudUpload className="h-4 w-4" />
             Sincronizar {queue.length}
           </button>
         </div>
+        <p className="-mt-1 text-right text-xs text-slate-500">
+          {lastUpdatedAt ? `Actualizado ${lastUpdatedAt} · ` : ''}
+          {catalog.customers.length} clientes · {catalog.products.length} productos
+        </p>
 
         <section className="border border-border bg-white p-3">
           <div className="mb-3 flex items-center gap-2">
