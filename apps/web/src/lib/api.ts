@@ -428,6 +428,16 @@ export type Health = {
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number
+  ) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
+}
+
 export async function apiRequest<T>(
   path: string,
   options: RequestInit & { token?: string } = {}
@@ -451,7 +461,7 @@ export async function apiRequest<T>(
 
     if (!response.ok) {
       const error = (await response.json().catch(() => null)) as { message?: string } | null;
-      throw new Error(error?.message ?? `Request failed with status ${response.status}`);
+      throw new ApiRequestError(error?.message ?? `Request failed with status ${response.status}`, response.status);
     }
 
     return (await response.json()) as T;

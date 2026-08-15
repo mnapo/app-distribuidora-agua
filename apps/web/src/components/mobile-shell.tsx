@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, CloudUpload, CreditCard, LogOut, MapPin, Plus, RefreshCw, Search, ShoppingCart, Trash2, UserPlus, X } from 'lucide-react';
-import { apiRequest, AuthResponse, Customer, DriverMobileRoute, DriverMobileStop, Invoice, Product } from '../lib/api';
+import { ApiRequestError, apiRequest, AuthResponse, Customer, DriverMobileRoute, DriverMobileStop, Invoice, Product } from '../lib/api';
 import { LoginForm } from './login-form';
 
-const storageKey = 'agua-distri-session';
+const storageKey = 'agua-distri-mobile-session';
+const legacyStorageKey = 'agua-distri-session';
 const queueKey = 'agua-distri-mobile-sync-queue';
 
 type QueuedOperation = {
@@ -61,11 +62,15 @@ type PaymentChoice = 'FULL' | 'PARTIAL' | 'NONE';
 
 function readStoredSession(): AuthResponse | null {
   try {
-    const stored = window.localStorage.getItem(storageKey);
+    const stored = window.localStorage.getItem(storageKey) ?? window.localStorage.getItem(legacyStorageKey);
     return stored ? (JSON.parse(stored) as AuthResponse) : null;
   } catch {
     return null;
   }
+}
+
+function canUseMobile(session: AuthResponse): boolean {
+  return session.user.permissions.some((permission) => permission.startsWith('driver_mobile.'));
 }
 
 export function MobileShell() {
@@ -94,13 +99,17 @@ export function MobileShell() {
   const [creatingSale, setCreatingSale] = useState(false);
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [creatingPayment, setCreatingPayment] = useState(false);
+  const [savingStop, setSavingStop] = useState(false);
   const [queue, setQueue] = useState<QueuedOperation[]>([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
 
   useEffect(() => {
     const storedSession = readStoredSession();
     const queued = window.localStorage.getItem(queueKey);
-    if (storedSession) setSession(storedSession);
+    if (storedSession && canUseMobile(storedSession)) {
+      window.localStorage.setItem(storageKey, JSON.stringify(storedSession));
+      setSession(storedSession);
+    }
     if (queued) setQueue(JSON.parse(queued) as QueuedOperation[]);
   }, []);
 
@@ -153,6 +162,10 @@ export function MobileShell() {
   }, [deliveryTotal, paymentChoice, selectedStop]);
 
   function handleLogin(nextSession: AuthResponse) {
+    if (!canUseMobile(nextSession)) {
+      setError('Este usuario no tiene permisos de repartidor movil');
+      return;
+    }
     window.localStorage.setItem(storageKey, JSON.stringify(nextSession));
     setError(null);
     setSession(nextSession);
@@ -166,6 +179,9 @@ export function MobileShell() {
   }
 
   function persistSession(nextSession: AuthResponse) {
+    if (!canUseMobile(nextSession)) {
+      throw new Error('Este usuario no tiene permisos de repartidor movil');
+    }
     window.localStorage.setItem(storageKey, JSON.stringify(nextSession));
     setSession(nextSession);
     return nextSession;
@@ -222,7 +238,12 @@ export function MobileShell() {
       setNewSale((current) => ({ ...current, routeId: current.routeId || nextRoutes[0]?.id || '' }));
       setLastUpdatedAt(new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }));
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'No se pudieron cargar datos');
+      const message = requestError instanceof Error ? requestError.message : 'No se pudieron cargar datos';
+      if (isDriverAccessError(message)) {
+        expireSession('Ingresa con un usuario chofer activo para usar el movil repartidor.');
+        return;
+      }
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -291,7 +312,7 @@ export function MobileShell() {
   }
 
   async function completeSelectedStop() {
-    if (!selectedStop) return;
+    if (!selectedStop || savingStop) return;
     if (selectedStop.stopStatus !== 'PENDING') {
       setError(`La parada #${selectedStop.sequence} ya esta ${selectedStop.stopStatus.toLowerCase()}`);
       setSelectedStop(null);
@@ -302,41 +323,51 @@ export function MobileShell() {
       setError('Para pago parcial ingresa un importe mayor a 0 y menor al total');
       return;
     }
-    const gps = await position();
-    const payload = {
-      idempotencyKey: idempotencyKey(),
-      items: items.map((item) => ({
-        productId: item.productId,
-        deliveredQuantity: Number(item.deliveredQuantity),
-        orderedQuantity: Number(item.orderedQuantity),
-        unitPrice: Number(item.unitPrice),
-        source: item.source
-      })),
-      collectedAmount: resolvedCollectedAmount,
-      paymentMethod,
-      observations: observations || 'Entregado desde movil',
-      ...gps
-    };
-    await sendOrQueue({ idempotencyKey: payload.idempotencyKey, action: 'complete_stop', routeOrderId: selectedStop.id, payload }, `/driver-mobile/stops/${selectedStop.id}/complete`, payload);
-    setSelectedStop(null);
+    setSavingStop(true);
+    try {
+      const gps = await position();
+      const payload = {
+        idempotencyKey: idempotencyKey(),
+        items: items.map((item) => ({
+          productId: item.productId,
+          deliveredQuantity: Number(item.deliveredQuantity),
+          orderedQuantity: Number(item.orderedQuantity),
+          unitPrice: Number(item.unitPrice),
+          source: item.source
+        })),
+        collectedAmount: resolvedCollectedAmount,
+        paymentMethod,
+        observations: observations || 'Entregado desde movil',
+        ...gps
+      };
+      const saved = await sendOrQueue({ idempotencyKey: payload.idempotencyKey, action: 'complete_stop', routeOrderId: selectedStop.id, payload }, `/driver-mobile/stops/${selectedStop.id}/complete`, payload);
+      if (saved) setSelectedStop(null);
+    } finally {
+      setSavingStop(false);
+    }
   }
 
   async function failSelectedStop() {
-    if (!selectedStop) return;
+    if (!selectedStop || savingStop) return;
     if (selectedStop.stopStatus !== 'PENDING') {
       setError(`La parada #${selectedStop.sequence} ya esta ${selectedStop.stopStatus.toLowerCase()}`);
       setSelectedStop(null);
       return;
     }
-    const gps = await position();
-    const payload = {
-      idempotencyKey: idempotencyKey(),
-      reason: failureReason,
-      observations: observations || 'Marcado desde movil',
-      ...gps
-    };
-    await sendOrQueue({ idempotencyKey: payload.idempotencyKey, action: 'fail_stop', routeOrderId: selectedStop.id, payload }, `/driver-mobile/stops/${selectedStop.id}/fail`, payload);
-    setSelectedStop(null);
+    setSavingStop(true);
+    try {
+      const gps = await position();
+      const payload = {
+        idempotencyKey: idempotencyKey(),
+        reason: failureReason,
+        observations: observations || 'Marcado desde movil',
+        ...gps
+      };
+      const saved = await sendOrQueue({ idempotencyKey: payload.idempotencyKey, action: 'fail_stop', routeOrderId: selectedStop.id, payload }, `/driver-mobile/stops/${selectedStop.id}/fail`, payload);
+      if (saved) setSelectedStop(null);
+    } finally {
+      setSavingStop(false);
+    }
   }
 
   async function createMobileSale() {
@@ -458,19 +489,26 @@ export function MobileShell() {
     }
   }
 
-  async function sendOrQueue(operation: QueuedOperation, path: string, body: object) {
-    if (!session) return;
+  async function sendOrQueue(operation: QueuedOperation, path: string, body: object): Promise<boolean> {
+    if (!session) return false;
     try {
       await requestWithSession(path, { method: 'POST', body: JSON.stringify(body) });
       await loadMobileData();
+      return true;
     } catch (requestError) {
-      persistQueue([...queue, operation]);
       const message = requestError instanceof Error ? requestError.message : 'No se pudo enviar la operacion';
       if (isAuthError(message)) {
+        persistQueue([...queue, operation]);
         expireSession('Sesion vencida. La operacion quedo guardada; ingresa de nuevo y toca Sincronizar.');
-        return;
+        return true;
       }
-      setError('Operacion guardada offline para sincronizar');
+      if (isOfflineError(requestError, message)) {
+        persistQueue([...queue, operation]);
+        setError('Operacion guardada offline para sincronizar');
+        return true;
+      }
+      setError(message);
+      return false;
     }
   }
 
@@ -848,11 +886,11 @@ export function MobileShell() {
               <textarea value={observations} onChange={(event) => setObservations(event.target.value)} rows={3} className="min-w-0 border border-border px-3 py-2 text-sm" placeholder="Observaciones" />
 
               <div className="grid min-w-0 grid-cols-2 gap-2">
-                <button onClick={() => void completeSelectedStop()} className="inline-flex h-11 items-center justify-center gap-2 bg-primary text-sm font-semibold text-white">
+                <button disabled={savingStop} onClick={() => void completeSelectedStop()} className="inline-flex h-11 items-center justify-center gap-2 bg-primary text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600">
                   <Check className="h-4 w-4" />
-                  Entregar
+                  {savingStop ? 'Enviando...' : 'Entregar'}
                 </button>
-                <button onClick={() => void failSelectedStop()} className="inline-flex h-11 items-center justify-center gap-2 border border-border text-sm font-semibold">
+                <button disabled={savingStop} onClick={() => void failSelectedStop()} className="inline-flex h-11 items-center justify-center gap-2 border border-border text-sm font-semibold disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500">
                   <X className="h-4 w-4" />
                   Fallida
                 </button>
@@ -907,6 +945,17 @@ function idempotencyKey(): string {
 function isAuthError(message: string): boolean {
   const normalized = message.toLowerCase();
   return normalized.includes('invalid token') || normalized.includes('unauthorized') || normalized.includes('jwt');
+}
+
+function isDriverAccessError(message: string): boolean {
+  return message.toLowerCase().includes('not an active driver');
+}
+
+function isOfflineError(error: unknown, message: string): boolean {
+  if (error instanceof ApiRequestError) return false;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+  const normalized = message.toLowerCase();
+  return normalized.includes('failed to fetch') || normalized.includes('networkerror') || normalized.includes('network request failed') || normalized.includes('la api no respondio');
 }
 
 function formatAmount(value: number): string {

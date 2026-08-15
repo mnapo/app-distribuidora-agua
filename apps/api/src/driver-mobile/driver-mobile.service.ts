@@ -18,7 +18,13 @@ import { STORAGE_PROVIDER, StorageProvider } from '../storage/storage.types.js';
 type RouteOrderForStop = Prisma.DeliveryRouteOrderGetPayload<{
   include: {
     route: { include: { driver: true; vehicle: true } };
-    order: { include: { deliveryAddress: true; items: { include: { product: true } } } };
+    order: {
+      include: {
+        deliveryAddress: true;
+        items: { include: { product: true } };
+        history: { select: { action: true } };
+      };
+    };
   };
 }>;
 
@@ -323,7 +329,13 @@ export class DriverMobileService {
       where: { id: routeOrderId, tenantId, route: { driverId: driver.id, status: 'LOADED' } },
       include: {
         route: { include: { driver: true, vehicle: true } },
-        order: { include: { deliveryAddress: true, items: { include: { product: true } } } }
+        order: {
+          include: {
+            deliveryAddress: true,
+            items: { include: { product: true } },
+            history: { where: { action: 'driver_mobile.create_sale' }, select: { action: true }, take: 1 }
+          }
+        }
       }
     });
     if (!routeOrder) throw new NotFoundException('Stop not found for driver');
@@ -384,7 +396,8 @@ export class DriverMobileService {
     const hasQuantityChange = dto.items.some((item) => (item.source ?? 'ORDER_ITEM') === 'ORDER_ITEM' && ordered.get(item.productId) !== item.deliveredQuantity);
     if (hasQuantityChange && !settings.allowDeliveryQuantityChanges) throw new BadRequestException('Quantity changes are not allowed');
     const hasAdditional = dto.items.some((item) => item.source === 'ADDITIONAL');
-    if (hasAdditional && !settings.allowMobileAdditionalSales) throw new BadRequestException('Additional mobile sales are not allowed');
+    const mobileCreatedOrder = routeOrder.order.history.some((item) => item.action === 'driver_mobile.create_sale');
+    if (hasAdditional && !settings.allowMobileAdditionalSales && !mobileCreatedOrder) throw new BadRequestException('Additional mobile sales are not allowed');
   }
 
   private async normalizeItems(items: DeliveryItemDto[], routeOrder: RouteOrderForStop, tenantId: string) {
