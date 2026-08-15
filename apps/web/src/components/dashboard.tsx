@@ -543,6 +543,18 @@ export function Dashboard({
     ],
     [data.customers.length, data.invoices.length, data.orders.length, data.products.length]
   );
+  const containerBalanceByPair = useMemo(() => {
+    const balances = new Map<string, number>();
+    for (const balance of data.containerBalances) {
+      balances.set(containerBalanceKey(balance.customer.id, balance.containerType.id), balance.balance);
+    }
+    return balances;
+  }, [data.containerBalances]);
+  const selectedContainerBalance = containerBalanceByPair.get(containerBalanceKey(containerMovementForm.customerId, containerMovementForm.containerTypeId)) ?? 0;
+  const selectedMovementDelta = containerMovementDelta(containerMovementForm.type, Number(containerMovementForm.quantity || 0));
+  const projectedContainerBalance = selectedContainerBalance + selectedMovementDelta;
+  const selectedContainerCustomer = data.customers.find((customer) => customer.id === containerMovementForm.customerId);
+  const selectedContainerType = data.containerTypes.find((type) => type.id === containerMovementForm.containerTypeId);
 
   async function refreshSession(): Promise<AuthResponse> {
     const nextSession = await apiRequest<AuthResponse>('/auth/refresh', {
@@ -2119,18 +2131,38 @@ export function Dashboard({
                         <Field label="Referencia" value={containerMovementForm.reference} onChange={(value) => setContainerMovementForm({ ...containerMovementForm, reference: value })} />
                         <Field label="Notas" value={containerMovementForm.notes} onChange={(value) => setContainerMovementForm({ ...containerMovementForm, notes: value })} />
                       </div>
+                      <div className="grid gap-3 border border-border bg-slate-50 p-3 text-sm sm:grid-cols-3">
+                        <div>
+                          <p className="text-slate-500">Saldo actual</p>
+                          <p className="mt-1 text-xl font-semibold text-slate-900">{selectedContainerBalance}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500">Movimiento</p>
+                          <p className={`mt-1 text-xl font-semibold ${selectedMovementDelta < 0 ? 'text-emerald-700' : selectedMovementDelta > 0 ? 'text-amber-700' : 'text-slate-900'}`}>
+                            {signedQuantity(selectedMovementDelta)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500">Le quedan al cliente</p>
+                          <p className="mt-1 text-xl font-semibold text-primary">{projectedContainerBalance}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {selectedContainerCustomer ? customerName(selectedContainerCustomer) : 'Cliente'} / {selectedContainerType?.name ?? 'Envase'}
+                          </p>
+                        </div>
+                      </div>
                       <div className="flex justify-end">
                         <PrimaryButton>Guardar movimiento</PrimaryButton>
                       </div>
                     </form>
                     <Table
-                      headers={['Fecha', 'Cliente', 'Envase', 'Tipo', 'Cantidad', 'Referencia']}
+                      headers={['Fecha', 'Cliente', 'Envase', 'Tipo', 'Cantidad', 'Saldo actual', 'Referencia']}
                       rows={data.containerMovements.map((movement) => [
                         movement.createdAt?.slice(0, 10) ?? '',
                         customerName(movement.customer),
                         movement.containerType.name,
                         containerMovementLabel(movement.type),
                         String(movement.quantity),
+                        String(containerBalanceByPair.get(containerBalanceKey(movement.customer.id, movement.containerType.id)) ?? 0),
                         movement.reference ?? ''
                       ])}
                     />
@@ -2612,6 +2644,21 @@ function containerMovementLabel(type: string): string {
     ADJUSTMENT: 'Ajuste'
   };
   return labels[type] ?? type;
+}
+
+function containerBalanceKey(customerId: string, containerTypeId: string): string {
+  return `${customerId}:${containerTypeId}`;
+}
+
+function containerMovementDelta(type: string, quantity: number): number {
+  if (!Number.isFinite(quantity)) return 0;
+  if (type === 'RETURNED') return -quantity;
+  return quantity;
+}
+
+function signedQuantity(value: number): string {
+  if (value > 0) return `+${value}`;
+  return String(value);
 }
 
 function dispenserStatusLabel(status: string): string {
