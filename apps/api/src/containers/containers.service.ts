@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Inject} from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Inject} from '@nestjs/common';
 import { ContainerMovementType, Prisma } from '@prisma/client';
 import { CreateContainerMovementDto } from './dto/create-container-movement.dto.js';
 import { CreateContainerTypeDto } from './dto/create-container-type.dto.js';
@@ -58,6 +58,16 @@ export class ContainersService {
     const delta = this.delta(dto.type, dto.quantity);
 
     const movement = await this.prisma.$transaction(async (tx) => {
+      if (dto.type === 'RETURNED') {
+        const currentBalance = await tx.customerContainerBalance.findUnique({
+          where: { customerId_containerTypeId: { customerId: dto.customerId, containerTypeId: dto.containerTypeId } }
+        });
+        const available = currentBalance?.balance ?? 0;
+        if (available < dto.quantity) {
+          throw new BadRequestException(`El cliente tiene ${available} envases disponibles para devolver`);
+        }
+      }
+
       const created = await tx.containerMovement.create({
         data: {
           tenantId,

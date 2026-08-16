@@ -51,6 +51,7 @@ test('ContainersService.createMovement decrements balance for returned container
         callback({
           containerMovement: { create: () => ({ id: 'movement-a' }) },
           customerContainerBalance: {
+            findUnique: () => ({ balance: 3 }),
             upsert: (args: { update: { balance: { increment: number } }; create: { balance: number } }) => {
               assert.equal(args.update.balance.increment, -2);
               assert.equal(args.create.balance, -2);
@@ -62,4 +63,36 @@ test('ContainersService.createMovement decrements balance for returned container
   );
 
   await service.createMovement({ customerId: 'customer-a', containerTypeId: 'container-a', type: 'RETURNED', quantity: 2 }, tenantUser);
+});
+
+test('ContainersService.createMovement rejects returned containers above current balance', async () => {
+  const calls: string[] = [];
+  const service = new ContainersService(
+    {
+      customer: { findFirst: () => ({ id: 'customer-a' }) },
+      containerType: { findFirst: () => ({ id: 'container-a' }) },
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({
+          containerMovement: {
+            create: () => {
+              calls.push('movement.create');
+              return { id: 'movement-a' };
+            }
+          },
+          customerContainerBalance: {
+            findUnique: () => ({ balance: 1 }),
+            upsert: () => {
+              calls.push('balance.upsert');
+            }
+          }
+        })
+    } as never,
+    { log: () => undefined } as never
+  );
+
+  await assert.rejects(
+    service.createMovement({ customerId: 'customer-a', containerTypeId: 'container-a', type: 'RETURNED', quantity: 2 }, tenantUser),
+    /El cliente tiene 1 envases disponibles para devolver/
+  );
+  assert.deepEqual(calls, []);
 });

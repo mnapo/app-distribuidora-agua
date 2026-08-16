@@ -543,18 +543,6 @@ export function Dashboard({
     ],
     [data.customers.length, data.invoices.length, data.orders.length, data.products.length]
   );
-  const containerBalanceByPair = useMemo(() => {
-    const balances = new Map<string, number>();
-    for (const balance of data.containerBalances) {
-      balances.set(containerBalanceKey(balance.customer.id, balance.containerType.id), balance.balance);
-    }
-    return balances;
-  }, [data.containerBalances]);
-  const selectedContainerBalance = containerBalanceByPair.get(containerBalanceKey(containerMovementForm.customerId, containerMovementForm.containerTypeId)) ?? 0;
-  const selectedMovementDelta = containerMovementDelta(containerMovementForm.type, Number(containerMovementForm.quantity || 0));
-  const projectedContainerBalance = selectedContainerBalance + selectedMovementDelta;
-  const selectedContainerCustomer = data.customers.find((customer) => customer.id === containerMovementForm.customerId);
-  const selectedContainerType = data.containerTypes.find((type) => type.id === containerMovementForm.containerTypeId);
 
   async function refreshSession(): Promise<AuthResponse> {
     const nextSession = await apiRequest<AuthResponse>('/auth/refresh', {
@@ -922,11 +910,18 @@ export function Dashboard({
   }
 
   async function createContainerMovement() {
+    const quantity = Number(containerMovementForm.quantity);
+    if (containerMovementForm.type === 'RETURNED') {
+      const available = currentContainerBalance(data.containerBalances, containerMovementForm.customerId, containerMovementForm.containerTypeId);
+      if (available < quantity) {
+        throw new Error(`El cliente tiene ${available} envases disponibles para devolver`);
+      }
+    }
     await post<ContainerMovement>('/containers/movements', {
       customerId: containerMovementForm.customerId,
       containerTypeId: containerMovementForm.containerTypeId,
       type: containerMovementForm.type,
-      quantity: Number(containerMovementForm.quantity),
+      quantity,
       reference: containerMovementForm.reference || undefined,
       notes: containerMovementForm.notes || undefined
     });
@@ -2131,25 +2126,6 @@ export function Dashboard({
                         <Field label="Referencia" value={containerMovementForm.reference} onChange={(value) => setContainerMovementForm({ ...containerMovementForm, reference: value })} />
                         <Field label="Notas" value={containerMovementForm.notes} onChange={(value) => setContainerMovementForm({ ...containerMovementForm, notes: value })} />
                       </div>
-                      <div className="grid gap-3 border border-border bg-slate-50 p-3 text-sm sm:grid-cols-3">
-                        <div>
-                          <p className="text-slate-500">Saldo actual seleccionado</p>
-                          <p className="mt-1 text-xl font-semibold text-slate-900">{selectedContainerBalance}</p>
-                        </div>
-                        <div>
-                          <p className="text-slate-500">Movimiento a guardar</p>
-                          <p className={`mt-1 text-xl font-semibold ${selectedMovementDelta < 0 ? 'text-emerald-700' : selectedMovementDelta > 0 ? 'text-amber-700' : 'text-slate-900'}`}>
-                            {signedQuantity(selectedMovementDelta)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-slate-500">Saldo despues de guardar</p>
-                          <p className="mt-1 text-xl font-semibold text-primary">{projectedContainerBalance}</p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {selectedContainerCustomer ? customerName(selectedContainerCustomer) : 'Cliente'} / {selectedContainerType?.name ?? 'Envase'}
-                          </p>
-                        </div>
-                      </div>
                       <div className="flex justify-end">
                         <PrimaryButton>Guardar movimiento</PrimaryButton>
                       </div>
@@ -2158,8 +2134,34 @@ export function Dashboard({
                       <div className="mb-5">
                         <h3 className="mb-2 text-sm font-semibold text-slate-800">Saldos actuales</h3>
                         <Table
-                          headers={['Cliente', 'Envase', 'Envases en poder del cliente']}
-                          rows={data.containerBalances.map((balance) => [customerName(balance.customer), balance.containerType.name, String(balance.balance)])}
+                          headers={['Cliente', 'Envase', 'Envases en poder del cliente', 'Acciones']}
+                          rows={data.containerBalances.map((balance) => [
+                            customerName(balance.customer),
+                            balance.containerType.name,
+                            <span key={`${balance.id}-balance`} className={balance.balance < 0 ? 'font-semibold text-red-700' : ''}>
+                              {balance.balance < 0 ? `Revisar saldo (${balance.balance})` : String(balance.balance)}
+                            </span>,
+                            balance.balance > 0 ? (
+                              <button
+                                key={`${balance.id}-return`}
+                                type="button"
+                                onClick={() =>
+                                  setContainerMovementForm((current) => ({
+                                    ...current,
+                                    customerId: balance.customer.id,
+                                    containerTypeId: balance.containerType.id,
+                                    type: 'RETURNED',
+                                    quantity: '1'
+                                  }))
+                                }
+                                className="border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:border-emerald-500"
+                              >
+                                Devolucion
+                              </button>
+                            ) : (
+                              <span key={`${balance.id}-no-return`} className="text-xs text-slate-500">Sin envases</span>
+                            )
+                          ])}
                         />
                       </div>
                       <Table
@@ -2654,14 +2656,14 @@ function containerMovementLabel(type: string): string {
   return labels[type] ?? type;
 }
 
-function containerBalanceKey(customerId: string, containerTypeId: string): string {
-  return `${customerId}:${containerTypeId}`;
-}
-
 function containerMovementDelta(type: string, quantity: number): number {
   if (!Number.isFinite(quantity)) return 0;
   if (type === 'RETURNED') return -quantity;
   return quantity;
+}
+
+function currentContainerBalance(balances: ContainerBalance[], customerId: string, containerTypeId: string): number {
+  return balances.find((balance) => balance.customer.id === customerId && balance.containerType.id === containerTypeId)?.balance ?? 0;
 }
 
 function signedQuantity(value: number): string {
