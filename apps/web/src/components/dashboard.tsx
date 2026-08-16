@@ -2133,17 +2133,17 @@ export function Dashboard({
                       </div>
                       <div className="grid gap-3 border border-border bg-slate-50 p-3 text-sm sm:grid-cols-3">
                         <div>
-                          <p className="text-slate-500">Saldo actual</p>
+                          <p className="text-slate-500">Saldo actual seleccionado</p>
                           <p className="mt-1 text-xl font-semibold text-slate-900">{selectedContainerBalance}</p>
                         </div>
                         <div>
-                          <p className="text-slate-500">Movimiento</p>
+                          <p className="text-slate-500">Movimiento a guardar</p>
                           <p className={`mt-1 text-xl font-semibold ${selectedMovementDelta < 0 ? 'text-emerald-700' : selectedMovementDelta > 0 ? 'text-amber-700' : 'text-slate-900'}`}>
                             {signedQuantity(selectedMovementDelta)}
                           </p>
                         </div>
                         <div>
-                          <p className="text-slate-500">Le quedan al cliente</p>
+                          <p className="text-slate-500">Saldo despues de guardar</p>
                           <p className="mt-1 text-xl font-semibold text-primary">{projectedContainerBalance}</p>
                           <p className="mt-1 text-xs text-slate-500">
                             {selectedContainerCustomer ? customerName(selectedContainerCustomer) : 'Cliente'} / {selectedContainerType?.name ?? 'Envase'}
@@ -2154,18 +2154,26 @@ export function Dashboard({
                         <PrimaryButton>Guardar movimiento</PrimaryButton>
                       </div>
                     </form>
-                    <Table
-                      headers={['Fecha', 'Cliente', 'Envase', 'Tipo', 'Cantidad', 'Saldo actual', 'Referencia']}
-                      rows={data.containerMovements.map((movement) => [
-                        movement.createdAt?.slice(0, 10) ?? '',
-                        customerName(movement.customer),
-                        movement.containerType.name,
-                        containerMovementLabel(movement.type),
-                        String(movement.quantity),
-                        String(containerBalanceByPair.get(containerBalanceKey(movement.customer.id, movement.containerType.id)) ?? 0),
-                        movement.reference ?? ''
-                      ])}
-                    />
+                    <>
+                      <div className="mb-5">
+                        <h3 className="mb-2 text-sm font-semibold text-slate-800">Saldos actuales</h3>
+                        <Table
+                          headers={['Cliente', 'Envase', 'Envases en poder del cliente']}
+                          rows={data.containerBalances.map((balance) => [customerName(balance.customer), balance.containerType.name, String(balance.balance)])}
+                        />
+                      </div>
+                      <Table
+                        headers={['Fecha', 'Cliente', 'Envase', 'Tipo', 'Movimiento', 'Referencia']}
+                        rows={data.containerMovements.map((movement) => [
+                          movement.createdAt?.slice(0, 10) ?? '',
+                          customerName(movement.customer),
+                          movement.containerType.name,
+                          containerMovementLabel(movement.type),
+                          signedQuantity(containerMovementDelta(movement.type, movement.quantity)),
+                          movement.reference ?? ''
+                        ])}
+                      />
+                    </>
                   </EntitySection>
                 ) : null}
                 {activeAssetsTab === 'balances' ? (
