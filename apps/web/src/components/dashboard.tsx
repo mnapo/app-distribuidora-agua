@@ -178,6 +178,7 @@ export function Dashboard({
   const [activeLogisticsTab, setActiveLogisticsTab] = useState<LogisticsTabKey>('branches');
   const [activeProductTab, setActiveProductTab] = useState<ProductTabKey>('products');
   const [activeAssetsTab, setActiveAssetsTab] = useState<AssetsTabKey>('containers');
+  const [showContainerMovementHistory, setShowContainerMovementHistory] = useState(false);
   const [data, setData] = useState<DashboardData>(initialData);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -2116,7 +2117,7 @@ export function Dashboard({
                   </EntitySection>
                 ) : null}
                 {activeAssetsTab === 'movements' ? (
-                  <EntitySection title="Registrar movimiento de envases" tableTitle="Ultimos movimientos">
+                  <EntitySection title="Registrar movimiento de envases" tableTitle="Saldos actuales">
                     <form onSubmit={(event) => submitForm(event, createContainerMovement)} className="grid gap-4">
                       <div className="grid gap-3 sm:grid-cols-2">
                         <Select label="Cliente" value={containerMovementForm.customerId} onChange={(value) => setContainerMovementForm({ ...containerMovementForm, customerId: value })} options={data.customers.map((customer) => [customer.id, customerName(customer)])} required />
@@ -2131,50 +2132,60 @@ export function Dashboard({
                       </div>
                     </form>
                     <>
-                      <div className="mb-5">
-                        <h3 className="mb-2 text-sm font-semibold text-slate-800">Saldos actuales</h3>
-                        <Table
-                          headers={['Cliente', 'Envase', 'Envases en poder del cliente', 'Acciones']}
-                          rows={data.containerBalances.map((balance) => [
-                            customerName(balance.customer),
-                            balance.containerType.name,
-                            <span key={`${balance.id}-balance`} className={balance.balance < 0 ? 'font-semibold text-red-700' : ''}>
-                              {balance.balance < 0 ? `Revisar saldo (${balance.balance})` : String(balance.balance)}
-                            </span>,
-                            balance.balance > 0 ? (
-                              <button
-                                key={`${balance.id}-return`}
-                                type="button"
-                                onClick={() =>
-                                  setContainerMovementForm((current) => ({
-                                    ...current,
-                                    customerId: balance.customer.id,
-                                    containerTypeId: balance.containerType.id,
-                                    type: 'RETURNED',
-                                    quantity: '1'
-                                  }))
-                                }
-                                className="border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:border-emerald-500"
-                              >
-                                Devolucion
-                              </button>
-                            ) : (
-                              <span key={`${balance.id}-no-return`} className="text-xs text-slate-500">Sin envases</span>
-                            )
-                          ])}
-                        />
-                      </div>
                       <Table
-                        headers={['Fecha', 'Cliente', 'Envase', 'Tipo', 'Movimiento', 'Referencia']}
-                        rows={data.containerMovements.map((movement) => [
-                          movement.createdAt?.slice(0, 10) ?? '',
-                          customerName(movement.customer),
-                          movement.containerType.name,
-                          containerMovementLabel(movement.type),
-                          signedQuantity(containerMovementDelta(movement.type, movement.quantity)),
-                          movement.reference ?? ''
+                        headers={['Cliente', 'Envase', 'Envases en poder del cliente', 'Acciones']}
+                        rows={data.containerBalances.map((balance) => [
+                          customerName(balance.customer),
+                          balance.containerType.name,
+                          <span key={`${balance.id}-balance`} className={balance.balance < 0 ? 'font-semibold text-red-700' : ''}>
+                            {balance.balance < 0 ? `Revisar saldo (${balance.balance})` : String(balance.balance)}
+                          </span>,
+                          balance.balance > 0 ? (
+                            <button
+                              key={`${balance.id}-return`}
+                              type="button"
+                              onClick={() =>
+                                setContainerMovementForm((current) => ({
+                                  ...current,
+                                  customerId: balance.customer.id,
+                                  containerTypeId: balance.containerType.id,
+                                  type: 'RETURNED',
+                                  quantity: '1'
+                                }))
+                              }
+                              className="border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:border-emerald-500"
+                            >
+                              Devolucion
+                            </button>
+                          ) : (
+                            <span key={`${balance.id}-no-return`} className="text-xs text-slate-500">Sin envases</span>
+                          )
                         ])}
                       />
+                      <div className="mt-4 border-t border-border pt-3">
+                        <button
+                          type="button"
+                          onClick={() => setShowContainerMovementHistory((current) => !current)}
+                          className="inline-flex h-9 items-center gap-2 border border-border bg-white px-3 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary"
+                        >
+                          {showContainerMovementHistory ? 'Ocultar ultimos movimientos' : `Ver ultimos movimientos (${data.containerMovements.length})`}
+                        </button>
+                        {showContainerMovementHistory ? (
+                          <div className="mt-3">
+                            <Table
+                              headers={['Fecha', 'Cliente', 'Envase', 'Tipo', 'Movimiento', 'Referencia']}
+                              rows={data.containerMovements.map((movement) => [
+                                movement.createdAt?.slice(0, 10) ?? '',
+                                customerName(movement.customer),
+                                movement.containerType.name,
+                                containerMovementLabel(movement.type),
+                                signedQuantity(containerMovementDelta(movement.type, movement.quantity)),
+                                movement.reference ?? ''
+                              ])}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
                     </>
                   </EntitySection>
                 ) : null}
