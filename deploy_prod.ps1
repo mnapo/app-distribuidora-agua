@@ -2,7 +2,8 @@ param(
   [string]$AppDir = "C:\Proyectos\AguaDistri",
   [string]$EnvFile = "",
   [string]$ComposeFile = "",
-  [string]$ProjectName = "agua-distri"
+  [string]$ProjectName = "agua-distri",
+  [switch]$Full
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,12 +28,21 @@ $env:ENV_FILE = $EnvFile
 Write-Host "==> Git pull..."
 git pull
 
-Write-Host "==> Docker build api/web..."
-docker compose `
-  --project-name $ProjectName `
-  --env-file $EnvFile `
-  -f $ComposeFile `
-  build --no-cache api web
+if ($Full) {
+  Write-Host "==> Docker build api/web (no-cache)..."
+  docker compose `
+    --project-name $ProjectName `
+    --env-file $EnvFile `
+    -f $ComposeFile `
+    build --no-cache api web
+} else {
+  Write-Host "==> Docker build api/web..."
+  docker compose `
+    --project-name $ProjectName `
+    --env-file $EnvFile `
+    -f $ComposeFile `
+    build api web
+}
 
 Write-Host "==> Aplicando migraciones Prisma..."
 docker compose `
