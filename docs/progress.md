@@ -23,7 +23,7 @@
 - Estado: completada
 - Funcionalidades:
   - Tenants y tenant settings basicas.
-  - Usuarios tenant-scoped.
+  - Usuarios tenant-scoped con email unico global para login sin selector de tenant.
   - Autenticacion con access token JWT y refresh tokens persistidos.
   - Roles y permisos configurables por tenant.
   - Platform Admin basico para listar/crear/actualizar tenants.
@@ -33,10 +33,11 @@
   - `apps/api/prisma/migrations/20260809130000_stage_1_core_saas/migration.sql`
 - Usuarios de prueba por seed:
   - `platform@aguadistri.local` / `Admin123!`
-  - `admin@norte.local` / `Admin123!` / tenant `norte`
-  - `admin@sur.local` / `Admin123!` / tenant `sur`
+  - `admin@norte.local` / `Admin123!`
+  - `admin@sur.local` / `Admin123!`
 - Decisiones:
   - El backend deriva `tenantId` desde el usuario autenticado en operaciones tenant-scoped.
+  - El login recibe solo email/password; el tenant se resuelve desde el usuario del sistema.
   - Platform Admin no administra usuarios internos desde `/users`; solo tenants desde `/tenants`.
   - El frontend guarda tokens en `localStorage` para esta etapa inicial. Puede migrarse a cookies httpOnly/BFF cuando se endurezca seguridad de frontend.
 - Pruebas ejecutadas:

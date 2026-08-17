@@ -92,11 +92,8 @@ async function main(): Promise<void> {
   const allPermissions = await prisma.permission.findMany();
   const passwordHash = await hash('Admin123!', 12);
 
-  const currentPlatformAdmin = await prisma.user.findFirst({
-    where: {
-      tenantId: null,
-      email: 'platform@aguadistri.local'
-    }
+  const currentPlatformAdmin = await prisma.user.findUnique({
+    where: { email: 'platform@aguadistri.local' }
   });
 
   const platformAdmin = currentPlatformAdmin
@@ -203,12 +200,10 @@ async function seedTenant(input: {
 
   const adminUser = await prisma.user.upsert({
     where: {
-      tenantId_email: {
-        tenantId: tenant.id,
-        email: input.adminEmail
-      }
+      email: input.adminEmail
     },
     update: {
+      tenantId: tenant.id,
       passwordHash: input.passwordHash,
       status: 'ACTIVE'
     },

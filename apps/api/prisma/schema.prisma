@@ -127,9 +127,8 @@ model User {
   deliveryRouteHistories DeliveryRouteHistory[]
   offlineSyncOperations OfflineSyncOperation[]
 
-  @@unique([tenantId, email])
+  @@unique([email])
   @@index([tenantId, status])
-  @@index([email])
   @@map("users")
 }
 

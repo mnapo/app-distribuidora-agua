@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { UsersService } from './users.service.js';
 import { AuthenticatedUser } from '../common/authenticated-user.js';
 
@@ -62,6 +62,35 @@ test('UsersService.create rejects roles that do not belong to the authenticated 
         tenantUser
       ),
     ForbiddenException
+  );
+});
+
+test('UsersService.create rejects duplicated user email globally', async () => {
+  const service = new UsersService(
+    {
+      user: {
+        findUnique: (args: { where: unknown }) => {
+          assert.deepEqual(args.where, { email: 'shared@tenant.local' });
+          return { id: 'existing-user' };
+        }
+      }
+    } as never,
+    {} as never,
+    {} as never
+  );
+
+  await assert.rejects(
+    () =>
+      service.create(
+        {
+          email: ' Shared@Tenant.Local ',
+          password: 'Admin123!',
+          firstName: 'Tenant',
+          lastName: 'User'
+        },
+        tenantUser
+      ),
+    ConflictException
   );
 });
 

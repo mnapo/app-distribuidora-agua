@@ -1,4 +1,5 @@
-import { ForbiddenException, Injectable, NotFoundException, Inject} from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException, Inject} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -37,30 +38,18 @@ export class UsersService {
 
   async create(dto: CreateUserDto, actor: AuthenticatedUser) {
     const tenantId = this.requireTenant(actor);
+    const email = dto.email.toLowerCase().trim();
     await this.assertRolesBelongToTenant(dto.roleIds ?? [], tenantId);
+    await this.assertEmailAvailable(email);
 
     const passwordHash = await this.auth.hashPassword(dto.password);
-    const user = await this.prisma.user.create({
-      data: {
-        tenantId,
-        email: dto.email.toLowerCase().trim(),
-        passwordHash,
-        firstName: dto.firstName.trim(),
-        lastName: dto.lastName.trim(),
-        userRoles: {
-          create: (dto.roleIds ?? []).map((roleId) => ({ roleId }))
-        }
-      },
-      select: {
-        id: true,
-        tenantId: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        status: true,
-        isPlatformAdmin: true,
-        userRoles: { include: { role: true } }
-      }
+    const user = await this.createUser({
+      tenantId,
+      email,
+      passwordHash,
+      firstName: dto.firstName.trim(),
+      lastName: dto.lastName.trim(),
+      roleIds: dto.roleIds ?? []
     });
 
     await this.audit.log({
@@ -158,6 +147,56 @@ export class UsersService {
 
     if (count !== new Set(roleIds).size) {
       throw new ForbiddenException('One or more roles do not belong to this tenant');
+    }
+  }
+
+  private async assertEmailAvailable(email: string, excludeUserId?: string): Promise<void> {
+    const existing = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true }
+    });
+
+    if (existing && existing.id !== excludeUserId) {
+      throw new ConflictException('User email already exists');
+    }
+  }
+
+  private async createUser(input: {
+    tenantId: string;
+    email: string;
+    passwordHash: string;
+    firstName: string;
+    lastName: string;
+    roleIds: string[];
+  }) {
+    try {
+      return await this.prisma.user.create({
+        data: {
+          tenantId: input.tenantId,
+          email: input.email,
+          passwordHash: input.passwordHash,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          userRoles: {
+            create: input.roleIds.map((roleId) => ({ roleId }))
+          }
+        },
+        select: {
+          id: true,
+          tenantId: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          status: true,
+          isPlatformAdmin: true,
+          userRoles: { include: { role: true } }
+        }
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('User email already exists');
+      }
+      throw error;
     }
   }
 

@@ -91,11 +91,13 @@ La Etapa 1 agrega el nucleo SaaS:
 
 Luego de `npm run prisma:seed`:
 
-| Tipo | Email | Password | Tenant |
-| --- | --- | --- | --- |
-| Platform Admin | `platform@aguadistri.local` | `Admin123!` | vacio |
-| Tenant Norte | `admin@norte.local` | `Admin123!` | `norte` |
-| Tenant Sur | `admin@sur.local` | `Admin123!` | `sur` |
+| Tipo | Email | Password |
+| --- | --- | --- |
+| Platform Admin | `platform@aguadistri.local` | `Admin123!` |
+| Tenant Norte | `admin@norte.local` | `Admin123!` |
+| Tenant Sur | `admin@sur.local` | `Admin123!` |
+
+El login no recibe tenant: el backend deriva el tenant desde el email unico global del usuario autenticado.
 
 ## API Etapa 1
 

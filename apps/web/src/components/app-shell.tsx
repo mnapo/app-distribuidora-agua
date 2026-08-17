@@ -52,12 +52,12 @@ export function AppShell() {
               <h2 className="text-xl font-semibold">Acceso</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
                 Usar usuarios del seed para validar autenticacion y aislamiento tenant. Platform Admin
-                ingresa sin tenant; usuarios de distribuidora ingresan con slug.
+                y usuarios de distribuidora ingresan solo con email y password.
               </p>
               <div className="mt-5 grid gap-2 text-sm text-slate-700">
-                <p>Tenant Norte: admin@norte.local / Admin123! / norte</p>
-                <p>Tenant Sur: admin@sur.local / Admin123! / sur</p>
-                <p>Platform: platform@aguadistri.local / Admin123! / sin tenant</p>
+                <p>Tenant Norte: admin@norte.local / Admin123!</p>
+                <p>Tenant Sur: admin@sur.local / Admin123!</p>
+                <p>Platform: platform@aguadistri.local / Admin123!</p>
               </div>
             </div>
             <LoginForm onLogin={handleLogin} />

@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  UnauthorizedException
-} from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { compare, hash } from 'bcryptjs';
 import jwt, { SignOptions } from 'jsonwebtoken';
@@ -40,7 +35,7 @@ export class AuthService {
 
   async login(dto: LoginDto, meta: RequestMeta): Promise<AuthResponse> {
     const email = dto.email.toLowerCase().trim();
-    const user = await this.findLoginUser(email, dto.tenantSlug);
+    const user = await this.findLoginUser(email);
 
     if (!user || user.status !== 'ACTIVE') {
       throw new UnauthorizedException('Invalid credentials');
@@ -159,31 +154,10 @@ export class AuthService {
     return hash(password, 12);
   }
 
-  private async findLoginUser(email: string, tenantSlug?: string) {
-    if (tenantSlug) {
-      const tenant = await this.prisma.tenant.findUnique({ where: { slug: tenantSlug } });
-      if (!tenant || tenant.status !== 'ACTIVE') {
-        throw new UnauthorizedException('Invalid credentials');
-      }
-
-      return this.prisma.user.findFirst({
-        where: {
-          email,
-          tenantId: tenant.id
-        }
-      });
-    }
-
-    const users = await this.prisma.user.findMany({
-      where: { email },
-      take: 2
+  private async findLoginUser(email: string) {
+    return this.prisma.user.findUnique({
+      where: { email }
     });
-
-    if (users.length > 1) {
-      throw new BadRequestException('tenantSlug is required for this email');
-    }
-
-    return users[0] ?? null;
   }
 
   private async createAuthResponse(

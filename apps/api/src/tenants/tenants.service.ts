@@ -1,4 +1,5 @@
-import { ForbiddenException, Injectable, NotFoundException, Inject} from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException, Inject} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { hash } from 'bcryptjs';
 import { CreateTenantDto } from './dto/create-tenant.dto.js';
 import { UpdateTenantDto } from './dto/update-tenant.dto.js';
@@ -49,6 +50,8 @@ export class TenantsService {
 
   async create(dto: CreateTenantDto, actor: AuthenticatedUser) {
     this.assertPlatformAdmin(actor);
+    const adminEmail = dto.adminEmail.toLowerCase().trim();
+    await this.assertEmailAvailable(adminEmail);
 
     const tenant = await this.prisma.$transaction(async (tx) => {
       const nextTenant = await tx.tenant.create({
@@ -96,7 +99,7 @@ export class TenantsService {
       await tx.user.create({
         data: {
           tenantId: nextTenant.id,
-          email: dto.adminEmail.toLowerCase().trim(),
+          email: adminEmail,
           passwordHash,
           firstName: dto.adminFirstName.trim(),
           lastName: dto.adminLastName.trim(),
@@ -109,7 +112,7 @@ export class TenantsService {
       });
 
       return nextTenant;
-    });
+    }).catch((error: unknown) => this.handleUniqueEmailError(error));
 
     await this.audit.log({
       tenantId: tenant.id,
@@ -117,7 +120,7 @@ export class TenantsService {
       action: 'tenants.create',
       entity: 'Tenant',
       entityId: tenant.id,
-      newValues: { name: tenant.name, slug: tenant.slug, status: tenant.status, adminEmail: dto.adminEmail.toLowerCase().trim() }
+      newValues: { name: tenant.name, slug: tenant.slug, status: tenant.status, adminEmail }
     });
 
     return tenant;
@@ -143,6 +146,7 @@ export class TenantsService {
       });
 
       if (this.hasAdminUpdate(dto)) {
+        const adminEmail = dto.adminEmail?.toLowerCase().trim();
         const adminRole = await tx.role.findFirst({
           where: {
             tenantId: id,
@@ -172,20 +176,27 @@ export class TenantsService {
         });
 
         if (adminUser) {
+          if (adminEmail) {
+            await this.assertEmailAvailable(adminEmail, adminUser.id);
+          }
+
           await tx.user.update({
             where: { id: adminUser.id },
             data: {
-              email: dto.adminEmail?.toLowerCase().trim(),
+              email: adminEmail,
               firstName: dto.adminFirstName?.trim(),
               lastName: dto.adminLastName?.trim(),
               passwordHash: dto.adminPassword ? await hash(dto.adminPassword, 12) : undefined
             }
           });
         } else {
+          const email = this.requiredAdminField(adminEmail, 'adminEmail');
+          await this.assertEmailAvailable(email);
+
           await tx.user.create({
             data: {
               tenantId: id,
-              email: this.requiredAdminField(dto.adminEmail, 'adminEmail').toLowerCase().trim(),
+              email,
               passwordHash: await hash(this.requiredAdminField(dto.adminPassword, 'adminPassword'), 12),
               firstName: this.requiredAdminField(dto.adminFirstName, 'adminFirstName').trim(),
               lastName: this.requiredAdminField(dto.adminLastName, 'adminLastName').trim(),
@@ -200,7 +211,7 @@ export class TenantsService {
       }
 
       return updatedTenant;
-    });
+    }).catch((error: unknown) => this.handleUniqueEmailError(error));
 
     await this.audit.log({
       tenantId: tenant.id,
@@ -255,6 +266,35 @@ export class TenantsService {
       throw new ForbiddenException(`${field} is required to create administrator user`);
     }
     return value;
+  }
+
+  private async assertEmailAvailable(email: string, excludeUserId?: string): Promise<void> {
+    const existing = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true }
+    });
+
+    if (existing && existing.id !== excludeUserId) {
+      throw new ConflictException('User email already exists');
+    }
+  }
+
+  private handleUniqueEmailError(error: unknown): never {
+    if (this.isUserEmailUniqueError(error)) {
+      throw new ConflictException('User email already exists');
+    }
+    throw error;
+  }
+
+  private isUserEmailUniqueError(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+      return false;
+    }
+
+    const target = error.meta?.target;
+    return Array.isArray(target)
+      ? target.includes('email')
+      : typeof target === 'string' && (target.includes('users_email_key') || target.includes('email'));
   }
 
   private assertPlatformAdmin(user: AuthenticatedUser): void {
