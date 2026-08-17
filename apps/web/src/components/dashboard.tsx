@@ -321,6 +321,7 @@ export function Dashboard({
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
   const [editingContainerTypeId, setEditingContainerTypeId] = useState<string | null>(null);
   const [editingDispenserModelId, setEditingDispenserModelId] = useState<string | null>(null);
+  const tenantLabel = tenantDisplayName(session);
   const [editingDispenserId, setEditingDispenserId] = useState<string | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
@@ -2480,6 +2481,7 @@ export function Dashboard({
           <div className="grid h-9 w-9 shrink-0 place-items-center bg-primary font-semibold">AD</div>
           <div className="min-w-0 opacity-0 transition-opacity group-hover:opacity-100">
             <p className="truncate text-sm font-semibold">Agua Distri</p>
+            <p className="truncate text-xs font-semibold text-slate-300">{tenantLabel}</p>
             <p className="truncate text-xs text-slate-400">{session.user.email}</p>
           </div>
         </div>
@@ -2517,6 +2519,7 @@ export function Dashboard({
             <div>
               <p className="text-xs font-semibold uppercase tracking-normal text-primary">Backoffice</p>
               <h1 className="text-2xl font-semibold">{navItems.find((item) => item.key === activeModule)?.label ?? 'Inicio'}</h1>
+              <p className="mt-1 text-sm text-slate-500">{tenantLabel}</p>
             </div>
             <div className="flex items-center gap-2">
               {error ? <p className="text-sm text-red-600">{error}</p> : null}
@@ -2539,6 +2542,11 @@ export function Dashboard({
 
 function customerName(customer: Customer): string {
   return customer.businessName ?? (`${customer.firstName ?? ''} ${customer.lastName ?? ''}`.trim() || 'Sin nombre');
+}
+
+function tenantDisplayName(session: AuthResponse): string {
+  if (session.user.isPlatformAdmin) return 'Plataforma';
+  return session.user.tenantName ?? session.user.tenantSlug ?? session.user.tenantId ?? 'Distribuidora';
 }
 
 function customerAddressLabel(customer: Customer): string {

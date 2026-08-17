@@ -1,6 +1,8 @@
 export type SessionUser = {
   id: string;
   tenantId: string | null;
+  tenantName?: string | null;
+  tenantSlug?: string | null;
   email: string;
   firstName: string;
   lastName: string;

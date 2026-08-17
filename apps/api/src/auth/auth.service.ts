@@ -168,6 +168,7 @@ export class AuthService {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
       include: {
+        tenant: true,
         userRoles: {
           include: {
             role: {
@@ -219,6 +220,8 @@ export class AuthService {
       user: {
         id: user.id,
         tenantId: user.tenantId,
+        tenantName: user.tenant?.name ?? null,
+        tenantSlug: user.tenant?.slug ?? null,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,

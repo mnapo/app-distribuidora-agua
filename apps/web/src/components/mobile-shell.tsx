@@ -154,6 +154,7 @@ export function MobileShell() {
   }, [catalog.customers, paymentCustomerSearch]);
 
   const deliveryTotal = useMemo(() => items.reduce((total, item) => total + itemTotal(item), 0), [items]);
+  const tenantLabel = session ? tenantDisplayName(session) : '';
 
   useEffect(() => {
     if (!selectedStop) return;
@@ -592,6 +593,7 @@ export function MobileShell() {
             <div>
               <p className="text-xs font-semibold uppercase text-primary">Movil repartidor</p>
               <h1 className="text-xl font-semibold">{session.user.firstName}</h1>
+              <p className="text-sm text-slate-500">{tenantLabel}</p>
             </div>
             <button onClick={handleLogout} className="grid h-10 w-10 place-items-center border border-border" title="Salir">
               <LogOut className="h-4 w-4" />
@@ -906,6 +908,11 @@ export function MobileShell() {
 function customerName(customer: Customer): string;
 function customerName(stopCustomer: Customer): string {
   return stopCustomer.businessName ?? (`${stopCustomer.firstName ?? ''} ${stopCustomer.lastName ?? ''}`.trim() || 'Sin nombre');
+}
+
+function tenantDisplayName(session: AuthResponse): string {
+  if (session.user.isPlatformAdmin) return 'Plataforma';
+  return session.user.tenantName ?? session.user.tenantSlug ?? session.user.tenantId ?? 'Distribuidora';
 }
 
 function orderReference(order?: { id: string } | null): string {
