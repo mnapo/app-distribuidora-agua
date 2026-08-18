@@ -1155,8 +1155,13 @@ export function Dashboard({
     await loadData();
   }
 
-  async function cancelOrder(orderId: string) {
-    await post<Order>(`/orders/${orderId}/cancel`, { reason: 'Cancelado desde backoffice' });
+  async function retryDelivery(orderId: string) {
+    await post<Order>(`/orders/${orderId}/retry-delivery`, {});
+    await loadData();
+  }
+
+  async function cancelOrder(orderId: string, reason = 'Cancelado desde backoffice') {
+    await post<Order>(`/orders/${orderId}/cancel`, { reason });
     await loadData();
   }
 
@@ -1462,7 +1467,7 @@ export function Dashboard({
 
     const editingRoute = editingRouteId ? data.deliveryRoutes.find((route) => route.id === editingRouteId) : null;
     const routeCandidateOrders = [
-      ...data.orders.filter((order) => order.status === 'CONFIRMED' || order.status === 'FAILED_DELIVERY'),
+      ...data.orders.filter((order) => order.status === 'CONFIRMED'),
       ...(editingRoute?.orders.map((routeOrder) => routeOrder.order) ?? [])
     ].filter((order, index, orders) => orders.findIndex((current) => current.id === order.id) === index);
     const routeCreationMessage = routeCandidateOrders.length
@@ -2089,7 +2094,12 @@ export function Dashboard({
                     order={order}
                     onEdit={() => editOrder(order)}
                     onConfirm={() => void confirmOrder(order.id)}
-                    onCancel={() => void cancelOrder(order.id)}
+                    onRetry={() => void retryDelivery(order.id)}
+                    onCancel={() => {
+                      const reason = window.prompt('Motivo de cancelacion', order.status === 'FAILED_DELIVERY' ? 'Entrega fallida' : 'Cancelado desde backoffice');
+                      if (reason === null) return;
+                      void cancelOrder(order.id, reason.trim() || 'Cancelado desde backoffice');
+                    }}
                   />
                 ])}
               />
@@ -2119,7 +2129,7 @@ export function Dashboard({
                     value={invoiceFromOrderForm.orderId}
                     onChange={(value) => setInvoiceFromOrderForm({ ...invoiceFromOrderForm, orderId: value })}
                     options={data.orders
-                      .filter((order) => order.status !== 'DRAFT' && order.status !== 'CANCELLED' && !invoicedOrderIds.has(order.id))
+                      .filter((order) => order.status !== 'DRAFT' && order.status !== 'CANCELLED' && order.status !== 'FAILED_DELIVERY' && !invoicedOrderIds.has(order.id))
                       .map((order) => [order.id, `${orderReference(order)} - ${customerName(order.customer)} - ${formatMoney(Number(order.total))}`])}
                     required
                   />
@@ -2981,11 +2991,13 @@ function OrderActions({
   order,
   onEdit,
   onConfirm,
+  onRetry,
   onCancel
 }: {
   order: Order;
   onEdit: () => void;
   onConfirm: () => void;
+  onRetry: () => void;
   onCancel: () => void;
 }) {
   return (
@@ -2998,6 +3010,11 @@ function OrderActions({
       {order.status === 'DRAFT' ? (
         <button type="button" onClick={onConfirm} className="border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:border-emerald-500">
           Confirmar
+        </button>
+      ) : null}
+      {order.status === 'FAILED_DELIVERY' ? (
+        <button type="button" onClick={onRetry} className="border border-primary/30 px-2 py-1 text-xs font-semibold text-primary hover:border-primary">
+          Reintentar
         </button>
       ) : null}
       {order.status !== 'CANCELLED' && order.status !== 'ASSIGNED' ? (

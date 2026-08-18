@@ -103,3 +103,35 @@ test('OrdersService.create resolves customer price and writes history in transac
 
   assert.deepEqual(calls, ['transaction', 'order.create', 'history.create']);
 });
+
+test('OrdersService.retryDelivery returns failed delivery to confirmed', async () => {
+  const calls: string[] = [];
+  const service = new OrdersService(
+    {
+      order: {
+        findFirst: () => ({ id: 'order-a', tenantId: 'tenant-a', status: 'FAILED_DELIVERY', items: [{ id: 'item-a' }] })
+      },
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({
+          order: {
+            update: (args: { data: { status: string; assignedDriverId: null; assignedVehicleId: null; assignedAt: null } }) => {
+              calls.push('order.update');
+              assert.equal(args.data.status, 'CONFIRMED');
+              assert.equal(args.data.assignedDriverId, null);
+              assert.equal(args.data.assignedVehicleId, null);
+              assert.equal(args.data.assignedAt, null);
+              return { id: 'order-a', status: 'CONFIRMED' };
+            }
+          },
+          orderHistory: {
+            create: () => calls.push('history.create')
+          }
+        })
+    } as never,
+    { log: () => calls.push('audit.log') } as never
+  );
+
+  await service.retryDelivery('order-a', tenantUser);
+
+  assert.deepEqual(calls, ['order.update', 'history.create', 'audit.log']);
+});

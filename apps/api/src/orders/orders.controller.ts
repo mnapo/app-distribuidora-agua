@@ -46,6 +46,12 @@ export class OrdersController {
     return this.orders.confirm(id, user);
   }
 
+  @Permissions('orders.update')
+  @Post(':id/retry-delivery')
+  retryDelivery(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.orders.retryDelivery(id, user);
+  }
+
   @Permissions('orders.assign')
   @Post(':id/assign')
   assign(@Param('id') id: string, @Body() dto: AssignOrderDto, @CurrentUser() user: AuthenticatedUser) {

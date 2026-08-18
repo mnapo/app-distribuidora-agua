@@ -141,6 +141,14 @@ export class OrdersService {
     });
   }
 
+  async retryDelivery(id: string, user: AuthenticatedUser) {
+    return this.transition(id, user, 'CONFIRMED', 'orders.retry_delivery', (current) => {
+      if (current.status !== 'FAILED_DELIVERY') throw new BadRequestException('Only failed deliveries can be retried');
+      if (!current.items.length) throw new BadRequestException('Order requires at least one item');
+      return { assignedDriverId: null, assignedVehicleId: null, assignedAt: null, confirmedAt: new Date() };
+    }, 'Reintento de entrega desde backoffice');
+  }
+
   async assign(id: string, dto: AssignOrderDto, user: AuthenticatedUser) {
     const tenantId = requireTenant(user);
     const current = await this.prisma.order.findFirst({ where: { id, tenantId }, include: { items: true } });
