@@ -1491,6 +1491,18 @@ export function Dashboard({
         }, new Map<string, { customer: Customer; balance: number; invoices: number }>())
         .values()
     ).sort((left, right) => right.balance - left.balance);
+    const pendingRouteCollections = data.deliveryRoutes
+      .filter((route) => route.status === 'LOADED')
+      .flatMap((route) =>
+        route.orders
+          .filter((routeOrder) => routeOrder.stopStatus === 'DELIVERED' && Number(routeOrder.collectedAmount ?? 0) > 0)
+          .map((routeOrder) => ({
+            route,
+            routeOrder,
+            invoice: routeOrder.invoices?.find((invoice) => invoice.status !== 'VOID') ?? routeOrder.order.invoices?.find((invoice) => invoice.status !== 'VOID')
+          }))
+      )
+      .filter((item) => item.invoice);
 
     switch (activeModule) {
       case 'clientes':
@@ -2093,12 +2105,12 @@ export function Dashboard({
             </Panel>
             <Panel title="Pedidos" icon={<FileText size={18} />}>
               <Table
-                headers={['Pedido', 'Cliente', 'Estado', 'Items', 'Total', 'Direccion', 'Acciones']}
+                headers={['Pedido', 'Cliente', 'Estado', 'Detalle', 'Total', 'Direccion', 'Acciones']}
                 rows={data.orders.map((order) => [
-                  orderReference(order),
+                  <OrderSummary key={`${order.id}-summary`} order={order} />,
                   customerName(order.customer),
                   orderStatusLabel(order.status),
-                  String(order.items.length),
+                  orderItemsLabel(order),
                   formatMoney(Number(order.total)),
                   orderAddressLabel(order),
                   <OrderActions
@@ -2151,6 +2163,22 @@ export function Dashboard({
               </Panel>
             </div>
             <div className="grid gap-4">
+              {pendingRouteCollections.length ? (
+                <Panel title="Cobros pendientes de cierre" icon={<CreditCard size={18} />}>
+                  <Table
+                    headers={['Ruta', 'Pedido', 'Cliente', 'Factura', 'Cobrado en ruta']}
+                    rows={pendingRouteCollections.map(({ route, routeOrder, invoice }) => [
+                      route.name,
+                      <OrderSummary key={`${routeOrder.id}-order`} order={routeOrder.order} />,
+                      customerName(routeOrder.order.customer),
+                      invoice ? `${invoice.number} ${invoiceStatusLabel(invoice.status)}` : '',
+                      <span key={`${routeOrder.id}-amount`} className="font-semibold text-amber-700">
+                        {formatMoney(Number(routeOrder.collectedAmount ?? 0))}
+                      </span>
+                    ])}
+                  />
+                </Panel>
+              ) : null}
               <Panel title="Deudas por cliente" icon={<Users size={18} />}>
                 <Table
                   headers={['Cliente', 'Facturas abiertas', 'Saldo']}
@@ -2163,11 +2191,12 @@ export function Dashboard({
               </Panel>
               <Panel title="Facturas" icon={<FileText size={18} />}>
                 <Table
-                  headers={['Numero', 'Pedido', 'Cliente', 'Estado', 'Total', 'Pagado', 'Saldo']}
+                  headers={['Numero', 'Pedido', 'Cliente', 'Detalle', 'Estado', 'Total', 'Pagado', 'Saldo']}
                   rows={data.invoices.map((invoice) => [
                     invoice.number,
-                    orderReference(invoice.order),
+                    <OrderSummary key={`${invoice.id}-order`} order={invoice.order} />,
                     customerName(invoice.customer),
+                    invoice.order ? orderItemsLabel(invoice.order) : '',
                     invoiceStatusLabel(invoice.status),
                     formatMoney(Number(invoice.total)),
                     invoicePaidAmount(invoice),
@@ -2752,6 +2781,19 @@ function orderAddressLabel(order: Order): string {
   return [order.deliveryStreet, order.deliveryStreetNumber].filter(Boolean).join(' ');
 }
 
+function orderItemsLabel(order?: Order | null): React.ReactNode {
+  if (!order?.items.length) return '';
+  return (
+    <div className="grid min-w-56 gap-1">
+      {order.items.map((item, index) => (
+        <p key={`${item.product.id}-${index}`} className="truncate text-sm">
+          {item.product.name} x {Number(item.quantity)} · {formatMoney(Number(item.unitPrice))}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function isAuthError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   return error.message.includes('401') || error.message.toLowerCase().includes('token');
@@ -3048,6 +3090,16 @@ function OrderActions({
   );
 }
 
+function OrderSummary({ order }: { order?: Order | null }) {
+  if (!order) return <span>Sin pedido</span>;
+  return (
+    <div className="grid min-w-56 gap-1">
+      <span className="font-medium">{orderReference(order)}</span>
+      {orderItemsLabel(order)}
+    </div>
+  );
+}
+
 function RouteActions({
   route,
   onView,
@@ -3194,7 +3246,7 @@ function RouteDetailPanel({ route, onClose }: { route: DeliveryRoute | null; onC
           const invoice = item.invoices?.[0] ?? item.order.invoices?.[0];
           return [
             `#${item.sequence}`,
-            orderReference(item.order),
+            <OrderSummary key={`${item.id}-order`} order={item.order} />,
             customerName(item.order.customer),
             stopStatusLabel(item.stopStatus),
             formatMoney(stopTotal),
@@ -3216,6 +3268,7 @@ function PaymentAllocations({ payment }: { payment: Payment }) {
       {payment.allocations.map((allocation) => (
         <div key={allocation.id} className="min-w-0">
           <p className="truncate">{orderReference(allocation.invoice.order)} / {allocation.invoice.number}</p>
+          {allocation.invoice.order ? orderItemsLabel(allocation.invoice.order) : null}
           <p className="text-xs text-slate-500">
             total {formatMoney(Number(allocation.invoice.total))} · aplicado {formatMoney(Number(allocation.amount))} · saldo {formatMoney(Number(allocation.invoice.balance))}
           </p>

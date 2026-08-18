@@ -30,7 +30,7 @@ export class BillingService {
     const tenantId = requireTenant(user);
     const where: Prisma.InvoiceWhereInput = { tenantId, customerId: query.customerId };
     const [data, total] = await this.prisma.$transaction([
-      this.prisma.invoice.findMany({ where, include: { customer: true, order: true, items: true, allocations: true }, orderBy: { issuedAt: 'desc' }, ...pageArgs(query) }),
+      this.prisma.invoice.findMany({ where, include: { customer: true, order: { include: { items: { include: { product: true } } } }, items: true, allocations: true }, orderBy: { issuedAt: 'desc' }, ...pageArgs(query) }),
       this.prisma.invoice.count({ where })
     ]);
     return { data, meta: { page: query.page, pageSize: query.pageSize, total } };
@@ -100,7 +100,7 @@ export class BillingService {
     const tenantId = requireTenant(user);
     const where: Prisma.PaymentWhereInput = { tenantId, customerId: query.customerId };
     const [data, total] = await this.prisma.$transaction([
-      this.prisma.payment.findMany({ where, include: { customer: true, allocations: { include: { invoice: { include: { order: true } } } } }, orderBy: { paidAt: 'desc' }, ...pageArgs(query) }),
+      this.prisma.payment.findMany({ where, include: { customer: true, allocations: { include: { invoice: { include: { order: { include: { items: { include: { product: true } } } } } } } } }, orderBy: { paidAt: 'desc' }, ...pageArgs(query) }),
       this.prisma.payment.count({ where })
     ]);
     return { data, meta: { page: query.page, pageSize: query.pageSize, total } };
