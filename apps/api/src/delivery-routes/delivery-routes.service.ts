@@ -18,7 +18,7 @@ type StockLocation = {
 
 type RouteOrderForClosing = Prisma.DeliveryRouteOrderGetPayload<{
   include: {
-    order: true;
+    order: { include: { invoices: true } };
     deliveredItems: { include: { product: true } };
     invoices: true;
   };
@@ -302,7 +302,9 @@ export class DeliveryRoutesService {
     tenantId: string,
     routeOrder: RouteOrderForClosing
   ) {
-    const existing = routeOrder.invoices.find((invoice) => invoice.status !== 'VOID');
+    const existing =
+      routeOrder.invoices.find((invoice) => invoice.status !== 'VOID') ??
+      routeOrder.order.invoices.find((invoice) => invoice.status !== 'VOID');
     if (existing) return existing;
 
     const items = routeOrder.deliveredItems.map((item) => ({
@@ -494,7 +496,7 @@ export class DeliveryRoutesService {
     return {
       orders: {
         include: {
-          order: true,
+          order: { include: { invoices: true } },
           deliveredItems: { include: { product: true } },
           invoices: true
         }

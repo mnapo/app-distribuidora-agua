@@ -70,7 +70,7 @@ test('DeliveryRoutesService.closePreliminary invoices delivered stops, applies p
               paymentMethod: 'CASH',
               observations: 'Pago parcial',
               failureReason: null,
-              order: { id: 'order-delivered', tenantId: 'tenant-a', customerId: 'customer-a', status: 'ASSIGNED' },
+              order: { id: 'order-delivered', tenantId: 'tenant-a', customerId: 'customer-a', status: 'ASSIGNED', invoices: [] },
               deliveredItems: [
                 { productId: 'product-a', deliveredQuantity: 1, unitPrice: 100, lineTotal: 100, product: { name: 'Bidon', tax: 0 } }
               ],
@@ -87,7 +87,7 @@ test('DeliveryRoutesService.closePreliminary invoices delivered stops, applies p
               paymentMethod: 'CASH',
               observations: null,
               failureReason: 'Cliente ausente',
-              order: { id: 'order-failed', tenantId: 'tenant-a', customerId: 'customer-b', status: 'ASSIGNED' },
+              order: { id: 'order-failed', tenantId: 'tenant-a', customerId: 'customer-b', status: 'ASSIGNED', invoices: [] },
               deliveredItems: [],
               invoices: []
             }
@@ -167,6 +167,103 @@ test('DeliveryRoutesService.closePreliminary invoices delivered stops, applies p
   assert.ok(calls.includes('invoice.update'));
   assert.ok(calls.includes('order.DELIVERED'));
   assert.ok(calls.includes('order.FAILED_DELIVERY'));
+  assert.ok(calls.includes('route.update'));
+});
+
+test('DeliveryRoutesService.closePreliminary reuses manual order invoice for route payment', async () => {
+  const calls: string[] = [];
+  const service = new DeliveryRoutesService(
+    {
+      deliveryRoute: {
+        findFirst: () => ({
+          id: 'route-a',
+          tenantId: 'tenant-a',
+          status: 'LOADED',
+          orders: [
+            {
+              id: 'route-order-delivered',
+              tenantId: 'tenant-a',
+              routeId: 'route-a',
+              orderId: 'order-delivered',
+              sequence: 1,
+              stopStatus: 'DELIVERED',
+              collectedAmount: 40,
+              paymentMethod: 'CASH',
+              observations: 'Pago parcial',
+              failureReason: null,
+              order: {
+                id: 'order-delivered',
+                tenantId: 'tenant-a',
+                customerId: 'customer-a',
+                status: 'ASSIGNED',
+                invoices: [{ id: 'invoice-manual', status: 'ISSUED', total: 100, paidTotal: 0, balance: 100 }]
+              },
+              deliveredItems: [
+                { productId: 'product-a', deliveredQuantity: 1, unitPrice: 100, lineTotal: 100, product: { name: 'Bidon', tax: 0 } }
+              ],
+              invoices: []
+            }
+          ]
+        }),
+        update: () => undefined
+      },
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({
+          invoice: {
+            create: () => {
+              throw new Error('manual invoice should be reused');
+            },
+            update: (args: { data: { status: string; paidTotal: number; balance: number } }) => {
+              calls.push('invoice.update');
+              assert.equal(args.data.status, 'PARTIALLY_PAID');
+              assert.equal(args.data.paidTotal, 40);
+              assert.equal(args.data.balance, 60);
+            }
+          },
+          accountMovement: {
+            findFirst: () => null,
+            create: () => calls.push('accountMovement.create')
+          },
+          payment: {
+            create: (args: { data: { amount: number; unappliedAmount: number } }) => {
+              calls.push('payment.create');
+              assert.equal(args.data.amount, 40);
+              assert.equal(args.data.unappliedAmount, 0);
+              return { id: 'payment-a' };
+            }
+          },
+          paymentAllocation: {
+            create: (args: { data: { invoiceId: string; amount: number } }) => {
+              calls.push('paymentAllocation.create');
+              assert.equal(args.data.invoiceId, 'invoice-manual');
+              assert.equal(args.data.amount, 40);
+            }
+          },
+          order: {
+            update: (args: { data: { status: string } }) => calls.push(`order.${args.data.status}`)
+          },
+          orderHistory: {
+            create: () => calls.push('orderHistory.create')
+          },
+          deliveryRoute: {
+            update: () => {
+              calls.push('route.update');
+              return { id: 'route-a', status: 'CLOSED_PRELIMINARY' };
+            }
+          },
+          deliveryRouteHistory: {
+            create: () => calls.push('routeHistory.create')
+          }
+        })
+    } as never,
+    { log: () => undefined } as never
+  );
+
+  await service.closePreliminary('route-a', {}, tenantUser);
+
+  assert.ok(calls.includes('paymentAllocation.create'));
+  assert.ok(calls.includes('invoice.update'));
+  assert.ok(calls.includes('order.DELIVERED'));
   assert.ok(calls.includes('route.update'));
 });
 

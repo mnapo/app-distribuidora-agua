@@ -1479,6 +1479,18 @@ export function Dashboard({
     const customerLocalityOptions = (provinceLocalityOptions[customerForm.province] ?? []).map((city) => [city, city]);
     const orderLocalityOptions = (provinceLocalityOptions[orderForm.deliveryProvince] ?? []).map((city) => [city, city]);
     const invoicedOrderIds = new Set(data.invoices.filter((invoice) => invoice.status !== 'VOID').map((invoice) => invoice.order?.id).filter(Boolean));
+    const customerDebtRows = Array.from(
+      data.invoices
+        .filter((invoice) => Number(invoice.balance) > 0 && invoice.status !== 'VOID')
+        .reduce((debts, invoice) => {
+          const current = debts.get(invoice.customer.id) ?? { customer: invoice.customer, balance: 0, invoices: 0 };
+          current.balance += Number(invoice.balance);
+          current.invoices += 1;
+          debts.set(invoice.customer.id, current);
+          return debts;
+        }, new Map<string, { customer: Customer; balance: number; invoices: number }>())
+        .values()
+    ).sort((left, right) => right.balance - left.balance);
 
     switch (activeModule) {
       case 'clientes':
@@ -2139,6 +2151,16 @@ export function Dashboard({
               </Panel>
             </div>
             <div className="grid gap-4">
+              <Panel title="Deudas por cliente" icon={<Users size={18} />}>
+                <Table
+                  headers={['Cliente', 'Facturas abiertas', 'Saldo']}
+                  rows={customerDebtRows.map((debt) => [
+                    customerName(debt.customer),
+                    String(debt.invoices),
+                    <span key={debt.customer.id} className="font-semibold text-red-700">{formatMoney(debt.balance)}</span>
+                  ])}
+                />
+              </Panel>
               <Panel title="Facturas" icon={<FileText size={18} />}>
                 <Table
                   headers={['Numero', 'Pedido', 'Cliente', 'Estado', 'Total', 'Pagado', 'Saldo']}
