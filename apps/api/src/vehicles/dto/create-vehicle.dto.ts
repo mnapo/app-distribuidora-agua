@@ -26,6 +26,11 @@ export class CreateVehicleDto {
   capacity?: number;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  capacityUnit?: string;
+
+  @IsOptional()
   @IsEnum(VehicleStatus)
   status?: VehicleStatus;
 }

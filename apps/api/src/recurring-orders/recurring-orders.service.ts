@@ -84,9 +84,11 @@ export class RecurringOrdersService {
         const existing = await this.prisma.recurringOrderGenerated.findUnique({ where: { ruleId_targetDate: { ruleId: rule.id, targetDate } } });
         if (existing) continue;
         const order = await this.prisma.$transaction(async (tx) => {
+          const number = await this.nextOrderNumber(tx, tenantId);
           const created = await tx.order.create({
             data: {
               tenantId,
+              number,
               customerId: rule.customerId,
               deliveryAddressId: rule.deliveryAddressId,
               requestedDeliveryAt: targetDate,
@@ -121,6 +123,11 @@ export class RecurringOrdersService {
     const rule = await this.prisma.recurringOrderRule.findFirst({ where: { id, tenantId } });
     if (!rule) throw new NotFoundException('Recurring rule not found');
     return this.prisma.recurringOrderRule.update({ where: { id }, data: { status } });
+  }
+
+  private async nextOrderNumber(tx: Prisma.TransactionClient, tenantId: string): Promise<number> {
+    const latest = await tx.order.aggregate({ where: { tenantId }, _max: { number: true } });
+    return (latest._max.number ?? 0) + 1;
   }
 
   private datesForRule(rule: { frequency: RecurrenceFrequency; interval: number; startDate: Date; endDate: Date | null; nextRunDate: Date | null; daysOfWeek: string | null; dayOfMonth: number | null }, until: Date): Date[] {

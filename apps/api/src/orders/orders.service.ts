@@ -67,9 +67,11 @@ export class OrdersService {
     const totals = this.totals(calculated);
 
     const order = await this.prisma.$transaction(async (tx) => {
+      const number = await this.nextOrderNumber(tx, tenantId);
       const created = await tx.order.create({
         data: {
           tenantId,
+          number,
           customerId: dto.customerId,
           deliveryAddressId: delivery.deliveryAddressId,
           createdById: user.id,
@@ -252,6 +254,7 @@ export class OrdersService {
   private async deliverySnapshot(dto: Partial<CreateOrderDto>, customerId: string, tenantId: string) {
     const explicitSnapshot = {
       deliveryStreet: dto.deliveryStreet?.trim(),
+      deliveryStreetNumber: dto.deliveryStreetNumber?.trim(),
       deliveryCity: dto.deliveryCity?.trim(),
       deliveryProvince: dto.deliveryProvince?.trim(),
       deliveryPostalCode: dto.deliveryPostalCode?.trim(),
@@ -269,6 +272,7 @@ export class OrdersService {
       deliveryAddressId: address?.id ?? dto.deliveryAddressId,
       snapshot: {
         deliveryStreet: address?.street,
+        deliveryStreetNumber: address?.streetNumber,
         deliveryCity: address?.city,
         deliveryProvince: address?.province,
         deliveryPostalCode: address?.postalCode,
@@ -280,6 +284,11 @@ export class OrdersService {
 
   private assertItems(items: OrderItemDto[] | undefined): void {
     if (!items?.length) throw new BadRequestException('Order requires at least one item');
+  }
+
+  private async nextOrderNumber(tx: Prisma.TransactionClient, tenantId: string): Promise<number> {
+    const latest = await tx.order.aggregate({ where: { tenantId }, _max: { number: true } });
+    return (latest._max.number ?? 0) + 1;
   }
 
   private async assertCustomer(customerId: string, tenantId: string): Promise<PriceContext> {

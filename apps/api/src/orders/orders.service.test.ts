@@ -61,8 +61,10 @@ test('OrdersService.create resolves customer price and writes history in transac
         calls.push('transaction');
         return callback({
           order: {
-            create: (args: { data: { subtotal: number; discountTotal: number; total: number; items: { create: unknown[] } } }) => {
+            aggregate: () => ({ _max: { number: 7 } }),
+            create: (args: { data: { number: number; subtotal: number; discountTotal: number; total: number; items: { create: unknown[] } } }) => {
               calls.push('order.create');
+              assert.equal(args.data.number, 8);
               assert.equal(args.data.subtotal, 160);
               assert.equal(args.data.discountTotal, 10);
               assert.equal(args.data.total, 150);

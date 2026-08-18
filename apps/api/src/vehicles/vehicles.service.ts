@@ -47,7 +47,8 @@ export class VehiclesService {
       ...dto,
       plate: dto.plate?.trim().toUpperCase(),
       brand: dto.brand?.trim(),
-      model: dto.model?.trim()
+      model: dto.model?.trim(),
+      capacityUnit: dto.capacityUnit?.trim() || 'unidad'
     };
   }
 
@@ -56,7 +57,8 @@ export class VehiclesService {
       ...dto,
       plate: dto.plate?.trim().toUpperCase(),
       brand: dto.brand?.trim(),
-      model: dto.model?.trim()
+      model: dto.model?.trim(),
+      capacityUnit: dto.capacityUnit?.trim()
     };
   }
 }

@@ -100,6 +100,7 @@ export type Customer = {
   status: string;
   addresses?: {
     street: string;
+    streetNumber: string | null;
     city: string | null;
     province: string | null;
     postalCode: string | null;
@@ -150,13 +151,16 @@ export type Vehicle = {
   model: string | null;
   year?: number | null;
   capacity?: string | null;
+  capacityUnit?: string | null;
   status: string;
 };
 
 export type Driver = {
   id: string;
+  number: number;
   status: string;
   licenseNumber: string | null;
+  licenseCategory?: string | null;
   user: User;
 };
 
@@ -171,11 +175,13 @@ export type InventoryItem = {
 
 export type Order = {
   id: string;
+  number: number;
   status: string;
   subtotal: string;
   discountTotal: string;
   total: string;
   deliveryStreet: string | null;
+  deliveryStreetNumber?: string | null;
   customer: Customer;
   assignedDriver?: Driver | null;
   assignedVehicle?: Vehicle | null;

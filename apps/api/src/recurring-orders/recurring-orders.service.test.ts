@@ -45,8 +45,10 @@ test('RecurringOrdersService.generate skips already generated target dates', asy
       $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
         callback({
           order: {
-            create: () => {
+            aggregate: () => ({ _max: { number: 3 } }),
+            create: (args: { data: { number: number } }) => {
               calls.push('order.create');
+              assert.equal(args.data.number, 4);
               return { id: 'order-b' };
             }
           },

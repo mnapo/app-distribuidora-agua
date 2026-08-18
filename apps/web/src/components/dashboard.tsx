@@ -100,6 +100,11 @@ type FieldProps = {
   placeholder?: string;
   type?: string;
   required?: boolean;
+  maxLength?: number;
+  min?: number;
+  max?: number;
+  step?: string;
+  inputMode?: 'text' | 'email' | 'tel' | 'numeric' | 'decimal';
 };
 
 type DraftOrderItem = {
@@ -155,7 +160,7 @@ const navItems: { key: ModuleKey; label: string; icon: React.ReactNode }[] = [
   { key: 'reportes', label: 'Reportes', icon: <BarChart3 size={19} /> }
 ];
 
-const productUnitOptions = [
+const productUnitOptions: [string, string][] = [
   ['unidad', 'Unidad'],
   ['bidon', 'Bidon'],
   ['pack', 'Pack'],
@@ -164,6 +169,45 @@ const productUnitOptions = [
   ['litro', 'Litro'],
   ['servicio', 'Servicio']
 ];
+
+const capacityUnitOptions: [string, string][] = [
+  ['unidad', 'Unidades'],
+  ['bidon', 'Bidones'],
+  ['pack', 'Packs'],
+  ['botella', 'Botellas'],
+  ['kg', 'Kilos'],
+  ['bandeja', 'Bandejas'],
+  ['caja', 'Cajas']
+];
+
+const provinceLocalityOptions: Record<string, string[]> = {
+  'Buenos Aires': ['Bahia Blanca', 'La Plata', 'Mar del Plata', 'Moron', 'Quilmes', 'Tandil'],
+  CABA: ['Ciudad Autonoma de Buenos Aires'],
+  Catamarca: ['San Fernando del Valle de Catamarca'],
+  Chaco: ['Resistencia'],
+  Chubut: ['Comodoro Rivadavia', 'Rawson', 'Trelew'],
+  Cordoba: ['Cordoba', 'Rio Cuarto', 'Villa Maria'],
+  Corrientes: ['Corrientes'],
+  'Entre Rios': ['Concordia', 'Parana'],
+  Formosa: ['Formosa'],
+  Jujuy: ['San Salvador de Jujuy'],
+  'La Pampa': ['Santa Rosa'],
+  'La Rioja': ['La Rioja'],
+  Mendoza: ['Godoy Cruz', 'Mendoza', 'San Rafael'],
+  Misiones: ['Obera', 'Posadas'],
+  Neuquen: ['Neuquen'],
+  'Rio Negro': ['Bariloche', 'General Roca', 'Viedma'],
+  Salta: ['Salta'],
+  'San Juan': ['San Juan'],
+  'San Luis': ['San Luis'],
+  'Santa Cruz': ['Rio Gallegos'],
+  'Santa Fe': ['Rosario', 'Santa Fe'],
+  'Santiago del Estero': ['Santiago del Estero'],
+  'Tierra del Fuego': ['Rio Grande', 'Ushuaia'],
+  Tucuman: ['San Miguel de Tucuman']
+};
+
+const provinceOptions = Object.keys(provinceLocalityOptions).map((province) => [province, province]);
 
 export function Dashboard({
   session,
@@ -192,6 +236,7 @@ export function Dashboard({
     email: '',
     phone: '',
     street: '',
+    streetNumber: '',
     city: '',
     province: '',
     postalCode: '',
@@ -224,6 +269,7 @@ export function Dashboard({
     model: '',
     year: '',
     capacity: '',
+    capacityUnit: 'unidad',
     status: 'ACTIVE'
   });
   const [driverForm, setDriverForm] = useState({
@@ -271,6 +317,7 @@ export function Dashboard({
     unitPrice: '',
     requestedDeliveryAt: '',
     deliveryStreet: '',
+    deliveryStreetNumber: '',
     deliveryCity: '',
     deliveryProvince: '',
     deliveryReference: '',
@@ -283,6 +330,11 @@ export function Dashboard({
     amount: '',
     method: 'CASH',
     reference: '',
+    notes: ''
+  });
+  const [invoiceFromOrderForm, setInvoiceFromOrderForm] = useState({
+    orderId: '',
+    dueAt: '',
     notes: ''
   });
   const [userForm, setUserForm] = useState({
@@ -529,6 +581,7 @@ export function Dashboard({
       return {
         ...current,
         deliveryStreet: address.street ?? '',
+        deliveryStreetNumber: address.streetNumber ?? '',
         deliveryCity: address.city ?? '',
         deliveryProvince: address.province ?? '',
         deliveryReference: address.reference ?? ''
@@ -619,6 +672,7 @@ export function Dashboard({
         ? [
             {
               street: customerForm.street,
+              streetNumber: customerForm.streetNumber || undefined,
               city: customerForm.city || undefined,
               province: customerForm.province || undefined,
               postalCode: customerForm.postalCode || undefined,
@@ -644,6 +698,7 @@ export function Dashboard({
       email: '',
       phone: '',
       street: '',
+      streetNumber: '',
       city: '',
       province: '',
       postalCode: '',
@@ -787,10 +842,11 @@ export function Dashboard({
   }
 
   async function createBranch() {
+    const payload = { ...branchForm, code: branchForm.code || slugFromName(branchForm.name).toUpperCase(), active: true };
     if (editingBranchId) {
-      await patch<Branch>(`/branches/${editingBranchId}`, { ...branchForm, active: true });
+      await patch<Branch>(`/branches/${editingBranchId}`, payload);
     } else {
-      await post<Branch>('/branches', { ...branchForm, active: true });
+      await post<Branch>('/branches', payload);
     }
     setBranchForm({ name: '', code: '', address: '', phone: '' });
     setEditingBranchId(null);
@@ -820,6 +876,7 @@ export function Dashboard({
       model: vehicleForm.model || undefined,
       year: vehicleForm.year ? Number(vehicleForm.year) : undefined,
       capacity: vehicleForm.capacity ? Number(vehicleForm.capacity) : undefined,
+      capacityUnit: vehicleForm.capacityUnit || 'unidad',
       status: vehicleForm.status
     };
     if (editingVehicleId) {
@@ -827,7 +884,7 @@ export function Dashboard({
     } else {
       await post<Vehicle>('/vehicles', payload);
     }
-    setVehicleForm({ plate: '', brand: '', model: '', year: '', capacity: '', status: 'ACTIVE' });
+    setVehicleForm({ plate: '', brand: '', model: '', year: '', capacity: '', capacityUnit: 'unidad', status: 'ACTIVE' });
     setEditingVehicleId(null);
   }
 
@@ -1004,12 +1061,13 @@ export function Dashboard({
     }
   }
 
-  async function saveOrder() {
+  async function saveOrder(confirmAfterSave = false) {
     if (!orderItems.length) return;
     const payload = {
       customerId: orderForm.customerId,
       requestedDeliveryAt: orderForm.requestedDeliveryAt || undefined,
       deliveryStreet: orderForm.deliveryStreet || undefined,
+      deliveryStreetNumber: orderForm.deliveryStreetNumber || undefined,
       deliveryCity: orderForm.deliveryCity || undefined,
       deliveryProvince: orderForm.deliveryProvince || undefined,
       deliveryReference: orderForm.deliveryReference || undefined,
@@ -1021,10 +1079,11 @@ export function Dashboard({
         unitPrice: item.unitPrice ? Number(item.unitPrice) : undefined
       }))
     };
-    if (editingOrderId) {
-      await patch<Order>(`/orders/${editingOrderId}`, payload);
-    } else {
-      await post<Order>('/orders', payload);
+    const savedOrder = editingOrderId
+      ? await patch<Order>(`/orders/${editingOrderId}`, payload)
+      : await post<Order>('/orders', payload);
+    if (confirmAfterSave && savedOrder.status === 'DRAFT') {
+      await post<Order>(`/orders/${savedOrder.id}/confirm`, {});
     }
     setOrderForm({
       customerId: '',
@@ -1033,6 +1092,7 @@ export function Dashboard({
       unitPrice: '',
       requestedDeliveryAt: '',
       deliveryStreet: '',
+      deliveryStreetNumber: '',
       deliveryCity: '',
       deliveryProvince: '',
       deliveryReference: '',
@@ -1041,6 +1101,16 @@ export function Dashboard({
     });
     setOrderItems([]);
     setEditingOrderId(null);
+  }
+
+  async function saveAndConfirmOrder() {
+    setError(null);
+    try {
+      await saveOrder(true);
+      await loadData();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'No se pudo confirmar el pedido');
+    }
   }
 
   function addOrderItem() {
@@ -1099,6 +1169,7 @@ export function Dashboard({
       unitPrice: '',
       requestedDeliveryAt: '',
       deliveryStreet: order.deliveryStreet ?? '',
+      deliveryStreetNumber: order.deliveryStreetNumber ?? '',
       deliveryCity: '',
       deliveryProvince: '',
       deliveryReference: '',
@@ -1125,8 +1196,17 @@ export function Dashboard({
     setPaymentForm({ customerId: '', amount: '', method: 'CASH', reference: '', notes: '' });
   }
 
+  async function createInvoiceFromOrder() {
+    await post<Invoice>('/billing/invoices/from-order', {
+      orderId: invoiceFromOrderForm.orderId,
+      dueAt: invoiceFromOrderForm.dueAt || undefined
+    });
+    setInvoiceFromOrderForm({ orderId: '', dueAt: '', notes: '' });
+  }
+
   async function applyOpenInvoices(paymentId: string) {
     await post<Payment>(`/billing/payments/${paymentId}/apply-open-invoices`, {});
+    await loadData();
   }
 
   async function createUser() {
@@ -1177,6 +1257,7 @@ export function Dashboard({
       email: customer.email ?? '',
       phone: customer.phone ?? '',
       street: address?.street ?? '',
+      streetNumber: address?.streetNumber ?? '',
       city: address?.city ?? '',
       province: address?.province ?? '',
       postalCode: address?.postalCode ?? '',
@@ -1212,7 +1293,9 @@ export function Dashboard({
     setOrderForm((current) => ({
       ...current,
       customerId,
+      requestedDeliveryAt: '',
       deliveryStreet: address?.street ?? '',
+      deliveryStreetNumber: address?.streetNumber ?? '',
       deliveryCity: address?.city ?? '',
       deliveryProvince: address?.province ?? '',
       deliveryReference: address?.reference ?? '',
@@ -1388,6 +1471,9 @@ export function Dashboard({
     const canCreateRoute = routeForm.orderIds.length > 0;
     const selectedOrderCustomer = data.customers.find((customer) => customer.id === orderForm.customerId);
     const selectedOrderCustomerAddress = selectedOrderCustomer?.addresses?.[0];
+    const customerLocalityOptions = (provinceLocalityOptions[customerForm.province] ?? []).map((city) => [city, city]);
+    const orderLocalityOptions = (provinceLocalityOptions[orderForm.deliveryProvince] ?? []).map((city) => [city, city]);
+    const invoicedOrderIds = new Set(data.invoices.filter((invoice) => invoice.status !== 'VOID').map((invoice) => invoice.order?.id).filter(Boolean));
 
     switch (activeModule) {
       case 'clientes':
@@ -1428,18 +1514,19 @@ export function Dashboard({
                       />
                     </>
                   )}
-                  <Field label="CUIT/DNI" value={customerForm.taxId} onChange={(value) => setCustomerForm({ ...customerForm, taxId: value })} />
+                  <Field label="CUIT/DNI" value={customerForm.taxId} maxLength={40} onChange={(value) => setCustomerForm({ ...customerForm, taxId: value })} />
                 </FormSection>
                 <FormSection title="Contacto">
-                  <Field label="Email" type="email" value={customerForm.email} onChange={(value) => setCustomerForm({ ...customerForm, email: value })} />
-                  <Field label="Telefono" value={customerForm.phone} onChange={(value) => setCustomerForm({ ...customerForm, phone: value })} />
+                  <Field label="Email" type="email" inputMode="email" value={customerForm.email} maxLength={191} onChange={(value) => setCustomerForm({ ...customerForm, email: value })} />
+                  <Field label="Telefono" type="tel" inputMode="tel" value={customerForm.phone} maxLength={40} onChange={(value) => setCustomerForm({ ...customerForm, phone: value })} />
                 </FormSection>
                 <FormSection title="Direccion de entrega">
-                  <Field label="Calle y numero" value={customerForm.street} onChange={(value) => setCustomerForm({ ...customerForm, street: value })} />
-                  <Field label="Localidad" value={customerForm.city} onChange={(value) => setCustomerForm({ ...customerForm, city: value })} />
-                  <Field label="Provincia" value={customerForm.province} onChange={(value) => setCustomerForm({ ...customerForm, province: value })} />
-                  <Field label="Codigo postal" value={customerForm.postalCode} onChange={(value) => setCustomerForm({ ...customerForm, postalCode: value })} />
-                  <Field label="Referencia" value={customerForm.reference} onChange={(value) => setCustomerForm({ ...customerForm, reference: value })} />
+                  <Field label="Calle" value={customerForm.street} maxLength={191} onChange={(value) => setCustomerForm({ ...customerForm, street: value })} />
+                  <Field label="Altura" value={customerForm.streetNumber} maxLength={40} onChange={(value) => setCustomerForm({ ...customerForm, streetNumber: value })} />
+                  <Select label="Provincia" value={customerForm.province} onChange={(value) => setCustomerForm({ ...customerForm, province: value, city: '' })} options={provinceOptions} />
+                  <Select label="Localidad" value={customerForm.city} onChange={(value) => setCustomerForm({ ...customerForm, city: value })} options={customerLocalityOptions} />
+                  <Field label="Codigo postal" value={customerForm.postalCode} maxLength={20} onChange={(value) => setCustomerForm({ ...customerForm, postalCode: value })} />
+                  <Field label="Referencia" value={customerForm.reference} maxLength={191} onChange={(value) => setCustomerForm({ ...customerForm, reference: value })} />
                 </FormSection>
                 <FormSection title="Condiciones comerciales">
                   <Field label="Limite credito" type="number" value={customerForm.creditLimit} onChange={(value) => setCustomerForm({ ...customerForm, creditLimit: value })} />
@@ -1526,12 +1613,12 @@ export function Dashboard({
                         product.name,
                         product.category?.name ?? '',
                         product.unit,
-                        product.price,
+                        formatMoney(Number(product.price)),
                         data.priceLists
                           .flatMap((priceList) =>
                             priceList.items
                               .filter((item) => item.productId === product.id)
-                              .map((item) => `${priceList.name}: ${item.price}`)
+                              .map((item) => `${priceList.name}: ${formatMoney(Number(item.price))}`)
                           )
                           .join(' | '),
                         <ActionButtons
@@ -1634,7 +1721,7 @@ export function Dashboard({
                         priceList.items.map((item) => [
                           priceList.name,
                           item.product?.name ?? data.products.find((product) => product.id === item.productId)?.name ?? item.productId,
-                          item.price,
+                          formatMoney(Number(item.price)),
                           <button
                             key={`${priceList.id}-${item.productId}`}
                             type="button"
@@ -1748,8 +1835,9 @@ export function Dashboard({
                         <Field label="Patente" value={vehicleForm.plate} onChange={(value) => setVehicleForm({ ...vehicleForm, plate: value })} required />
                         <Field label="Marca" value={vehicleForm.brand} onChange={(value) => setVehicleForm({ ...vehicleForm, brand: value })} />
                         <Field label="Modelo" value={vehicleForm.model} onChange={(value) => setVehicleForm({ ...vehicleForm, model: value })} />
-                        <Field label="Anio" type="number" value={vehicleForm.year} onChange={(value) => setVehicleForm({ ...vehicleForm, year: value })} />
-                        <Field label="Capacidad" type="number" value={vehicleForm.capacity} onChange={(value) => setVehicleForm({ ...vehicleForm, capacity: value })} />
+                        <Field label="Año" type="number" min={1950} max={2100} value={vehicleForm.year} onChange={(value) => setVehicleForm({ ...vehicleForm, year: value })} />
+                        <Field label="Capacidad" type="number" min={0} step="0.01" value={vehicleForm.capacity} onChange={(value) => setVehicleForm({ ...vehicleForm, capacity: value })} />
+                        <Select label="Unidad capacidad" value={vehicleForm.capacityUnit} onChange={(value) => setVehicleForm({ ...vehicleForm, capacityUnit: value })} options={capacityUnitOptions} />
                         <Select label="Estado" value={vehicleForm.status} onChange={(value) => setVehicleForm({ ...vehicleForm, status: value })} options={[['ACTIVE', 'Activo'], ['MAINTENANCE', 'Mantenimiento'], ['INACTIVE', 'Inactivo']]} />
                       </div>
                       <div className="flex justify-end">
@@ -1757,11 +1845,12 @@ export function Dashboard({
                       </div>
                     </form>
                     <Table
-                      headers={['Patente', 'Marca', 'Modelo', 'Estado', 'Acciones']}
+                      headers={['Patente', 'Marca', 'Modelo', 'Capacidad', 'Estado', 'Acciones']}
                       rows={data.vehicles.map((vehicle) => [
                         vehicle.plate,
                         vehicle.brand ?? '',
                         vehicle.model ?? '',
+                        vehicle.capacity ? `${vehicle.capacity} ${capacityUnitLabel(vehicle.capacityUnit ?? 'unidad')}` : '',
                         vehicle.status,
                         <ActionButtons
                           key={vehicle.id}
@@ -1773,6 +1862,7 @@ export function Dashboard({
                               model: vehicle.model ?? '',
                               year: vehicle.year ? String(vehicle.year) : '',
                               capacity: vehicle.capacity ?? '',
+                              capacityUnit: vehicle.capacityUnit ?? 'unidad',
                               status: vehicle.status
                             });
                           }}
@@ -1789,7 +1879,7 @@ export function Dashboard({
                       <div className="grid gap-3 sm:grid-cols-2">
                         <Select label="Usuario" value={driverForm.userId} onChange={(value) => setDriverForm({ ...driverForm, userId: value })} options={data.users.map((user) => [user.id, `${user.firstName} ${user.lastName}`])} required />
                         <Field label="Licencia" value={driverForm.licenseNumber} onChange={(value) => setDriverForm({ ...driverForm, licenseNumber: value })} />
-                        <Field label="Categoria" value={driverForm.licenseCategory} onChange={(value) => setDriverForm({ ...driverForm, licenseCategory: value })} />
+                        <Select label="Categoria" value={driverForm.licenseCategory} onChange={(value) => setDriverForm({ ...driverForm, licenseCategory: value })} options={[['A', 'A'], ['B1', 'B1'], ['B2', 'B2'], ['C1', 'C1'], ['C2', 'C2'], ['C3', 'C3'], ['D1', 'D1'], ['D2', 'D2'], ['E1', 'E1'], ['E2', 'E2'], ['G', 'G']]} />
                         <Select label="Estado" value={driverForm.status} onChange={(value) => setDriverForm({ ...driverForm, status: value })} options={[['ACTIVE', 'Activo'], ['INACTIVE', 'Inactivo']]} />
                       </div>
                       <div className="flex justify-end">
@@ -1827,8 +1917,8 @@ export function Dashboard({
                             />,
                             customerName(order.customer),
                             orderStatusLabel(order.status),
-                            order.total,
-                            order.deliveryStreet ?? ''
+                            formatMoney(Number(order.total)),
+                            orderAddressLabel(order)
                           ])}
                         />
                         {!canCreateRoute ? (
@@ -1891,9 +1981,10 @@ export function Dashboard({
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Select label="Cliente" value={orderForm.customerId} onChange={updateOrderCustomer} options={data.customers.map((customer) => [customer.id, customerName(customer)])} required />
                   <Field label="Fecha entrega" type="datetime-local" value={orderForm.requestedDeliveryAt} onChange={(value) => setOrderForm({ ...orderForm, requestedDeliveryAt: value })} />
-                  <Field label="Direccion entrega" value={orderForm.deliveryStreet} onChange={(value) => setOrderForm({ ...orderForm, deliveryStreet: value })} />
-                  <Field label="Localidad" value={orderForm.deliveryCity} onChange={(value) => setOrderForm({ ...orderForm, deliveryCity: value })} />
-                  <Field label="Provincia" value={orderForm.deliveryProvince} onChange={(value) => setOrderForm({ ...orderForm, deliveryProvince: value })} />
+                  <Field label="Calle entrega" value={orderForm.deliveryStreet} maxLength={191} onChange={(value) => setOrderForm({ ...orderForm, deliveryStreet: value })} />
+                  <Field label="Altura" value={orderForm.deliveryStreetNumber} maxLength={40} onChange={(value) => setOrderForm({ ...orderForm, deliveryStreetNumber: value })} />
+                  <Select label="Provincia" value={orderForm.deliveryProvince} onChange={(value) => setOrderForm({ ...orderForm, deliveryProvince: value, deliveryCity: '' })} options={provinceOptions} />
+                  <Select label="Localidad" value={orderForm.deliveryCity} onChange={(value) => setOrderForm({ ...orderForm, deliveryCity: value })} options={orderLocalityOptions} />
                   <Field label="Referencia" value={orderForm.deliveryReference} onChange={(value) => setOrderForm({ ...orderForm, deliveryReference: value })} />
                 </div>
                 {orderForm.customerId && !selectedOrderCustomerAddress ? (
@@ -1904,8 +1995,8 @@ export function Dashboard({
                 <div className="border border-border bg-slate-50 p-3">
                   <div className="grid gap-3 sm:grid-cols-[1fr_90px_120px_auto]">
                     <Select label="Producto" value={orderForm.productId} onChange={updateOrderProduct} options={data.products.map((product) => [product.id, product.name])} />
-                    <Field label="Cantidad" type="number" value={orderForm.quantity} onChange={(value) => setOrderForm({ ...orderForm, quantity: value })} />
-                    <Field label="Precio" type="number" value={orderForm.unitPrice} onChange={(value) => setOrderForm({ ...orderForm, unitPrice: value })} />
+                    <Field label="Cantidad" type="number" min={0.001} step="0.001" value={orderForm.quantity} onChange={(value) => setOrderForm({ ...orderForm, quantity: value })} />
+                    <Field label="Precio" type="number" min={0} step="0.01" value={orderForm.unitPrice} onChange={(value) => setOrderForm({ ...orderForm, unitPrice: value })} />
                     <div className="flex items-end">
                       <button type="button" onClick={addOrderItem} className="h-10 bg-slate-900 px-3 text-sm font-semibold text-white">
                         Agregar
@@ -1932,7 +2023,7 @@ export function Dashboard({
                           onChange={(event) => updateOrderItem(index, { unitPrice: event.target.value })}
                           className="h-8 w-24 border border-border px-2 text-sm"
                         />,
-                        String(Number(item.quantity || 0) * Number(item.unitPrice || 0)),
+                        formatMoney(Number(item.quantity || 0) * Number(item.unitPrice || 0)),
                         <button key="remove" type="button" onClick={() => removeOrderItem(index)} className="border border-red-200 px-2 py-1 text-xs font-semibold text-red-700">
                           Quitar
                         </button>
@@ -1940,13 +2031,20 @@ export function Dashboard({
                     })}
                   />
                   <div className="mt-3 flex justify-end text-sm">
-                    <span className="font-semibold">Total preliminar: {orderDraftTotal().toFixed(2)}</span>
+                    <span className="font-semibold">Total preliminar: {formatMoney(orderDraftTotal())}</span>
                   </div>
                 </div>
                 <TextArea label="Observaciones de entrega" value={orderForm.deliveryNotes} onChange={(value) => setOrderForm({ ...orderForm, deliveryNotes: value })} />
                 <TextArea label="Notas internas" value={orderForm.notes} onChange={(value) => setOrderForm({ ...orderForm, notes: value })} />
                 <div className="flex flex-wrap gap-2">
                   <PrimaryButton>{editingOrderId ? 'Actualizar pedido' : 'Guardar pedido en borrador'}</PrimaryButton>
+                  <button
+                    type="button"
+                    onClick={() => void saveAndConfirmOrder()}
+                    className="h-10 border border-emerald-200 px-4 text-sm font-semibold text-emerald-700 hover:border-emerald-500"
+                  >
+                    Guardar y confirmar
+                  </button>
                   {editingOrderId ? (
                     <button
                       type="button"
@@ -1958,9 +2056,10 @@ export function Dashboard({
                           productId: '',
                           quantity: '1',
                           unitPrice: '',
-                          requestedDeliveryAt: '',
-                          deliveryStreet: '',
-                          deliveryCity: '',
+      requestedDeliveryAt: '',
+      deliveryStreet: '',
+      deliveryStreetNumber: '',
+      deliveryCity: '',
                           deliveryProvince: '',
                           deliveryReference: '',
                           deliveryNotes: '',
@@ -1983,8 +2082,8 @@ export function Dashboard({
                   customerName(order.customer),
                   orderStatusLabel(order.status),
                   String(order.items.length),
-                  order.total,
-                  order.deliveryStreet ?? '',
+                  formatMoney(Number(order.total)),
+                  orderAddressLabel(order),
                   <OrderActions
                     key={order.id}
                     order={order}
@@ -2000,16 +2099,35 @@ export function Dashboard({
       case 'facturacion':
         return (
           <div className="grid gap-4 xl:grid-cols-[minmax(0,520px)_1fr]">
-            <Panel title="Registrar pago" icon={<CreditCard size={18} />}>
-              <form onSubmit={(event) => submitForm(event, createPayment)} className="grid gap-3 sm:grid-cols-2">
-                <Select label="Cliente" value={paymentForm.customerId} onChange={(value) => setPaymentForm({ ...paymentForm, customerId: value })} options={data.customers.map((customer) => [customer.id, customerName(customer)])} required />
-                <Field label="Importe" type="number" value={paymentForm.amount} onChange={(value) => setPaymentForm({ ...paymentForm, amount: value })} required />
-                <Select label="Medio" value={paymentForm.method} onChange={(value) => setPaymentForm({ ...paymentForm, method: value })} options={[['CASH', 'Efectivo'], ['TRANSFER', 'Transferencia'], ['CARD', 'Tarjeta'], ['CHECK', 'Cheque'], ['OTHER', 'Otro']]} />
-                <Field label="Referencia" value={paymentForm.reference} onChange={(value) => setPaymentForm({ ...paymentForm, reference: value })} />
-                <TextArea label="Notas" value={paymentForm.notes} onChange={(value) => setPaymentForm({ ...paymentForm, notes: value })} className="sm:col-span-2" />
-                <PrimaryButton>Guardar pago</PrimaryButton>
-              </form>
-            </Panel>
+            <div className="grid gap-4">
+              <Panel title="Registrar pago" icon={<CreditCard size={18} />}>
+                <form onSubmit={(event) => submitForm(event, createPayment)} className="grid gap-3 sm:grid-cols-2">
+                  <Select label="Cliente" value={paymentForm.customerId} onChange={(value) => setPaymentForm({ ...paymentForm, customerId: value })} options={data.customers.map((customer) => [customer.id, customerName(customer)])} required />
+                  <Field label="Importe" type="number" min={0.01} step="0.01" value={paymentForm.amount} onChange={(value) => setPaymentForm({ ...paymentForm, amount: value })} required />
+                  <Select label="Medio" value={paymentForm.method} onChange={(value) => setPaymentForm({ ...paymentForm, method: value, reference: value === 'CASH' ? '' : paymentForm.reference })} options={[['CASH', 'Efectivo'], ['TRANSFER', 'Transferencia'], ['CARD', 'Tarjeta'], ['CHECK', 'Cheque'], ['OTHER', 'Otro']]} />
+                  {paymentForm.method !== 'CASH' ? (
+                    <Field label="Referencia" value={paymentForm.reference} maxLength={191} onChange={(value) => setPaymentForm({ ...paymentForm, reference: value })} />
+                  ) : null}
+                  <TextArea label="Notas" value={paymentForm.notes} onChange={(value) => setPaymentForm({ ...paymentForm, notes: value })} className="sm:col-span-2" />
+                  <PrimaryButton>Guardar pago</PrimaryButton>
+                </form>
+              </Panel>
+              <Panel title="Emitir factura" icon={<FileText size={18} />}>
+                <form onSubmit={(event) => submitForm(event, createInvoiceFromOrder)} className="grid gap-3">
+                  <Select
+                    label="Pedido"
+                    value={invoiceFromOrderForm.orderId}
+                    onChange={(value) => setInvoiceFromOrderForm({ ...invoiceFromOrderForm, orderId: value })}
+                    options={data.orders
+                      .filter((order) => order.status !== 'DRAFT' && order.status !== 'CANCELLED' && !invoicedOrderIds.has(order.id))
+                      .map((order) => [order.id, `${orderReference(order)} - ${customerName(order.customer)} - ${formatMoney(Number(order.total))}`])}
+                    required
+                  />
+                  <Field label="Vencimiento" type="date" value={invoiceFromOrderForm.dueAt} onChange={(value) => setInvoiceFromOrderForm({ ...invoiceFromOrderForm, dueAt: value })} />
+                  <PrimaryButton>Crear factura</PrimaryButton>
+                </form>
+              </Panel>
+            </div>
             <div className="grid gap-4">
               <Panel title="Facturas" icon={<FileText size={18} />}>
                 <Table
@@ -2019,9 +2137,9 @@ export function Dashboard({
                     orderReference(invoice.order),
                     customerName(invoice.customer),
                     invoiceStatusLabel(invoice.status),
-                    invoice.total,
+                    formatMoney(Number(invoice.total)),
                     invoicePaidAmount(invoice),
-                    invoice.balance
+                    formatMoney(Number(invoice.balance))
                   ])}
                 />
               </Panel>
@@ -2031,9 +2149,9 @@ export function Dashboard({
                   rows={data.payments.map((payment) => [
                     customerName(payment.customer),
                     <PaymentAllocations key={payment.id} payment={payment} />,
-                    payment.amount,
+                    formatMoney(Number(payment.amount)),
                     paymentMethodLabel(payment.method),
-                    payment.unappliedAmount,
+                    formatMoney(Number(payment.unappliedAmount)),
                     Number(payment.unappliedAmount) > 0 ? (
                       <button key={payment.id} type="button" onClick={() => void applyOpenInvoices(payment.id)} className="border border-primary/30 px-2 py-1 text-xs font-semibold text-primary hover:border-primary">
                         Aplicar a deuda
@@ -2466,7 +2584,7 @@ export function Dashboard({
             <Panel title="Actividad comercial" icon={<ShoppingCart size={18} />} className="xl:col-span-2">
               <Table
                 headers={['Pedido', 'Cliente', 'Estado', 'Total']}
-                rows={data.orders.slice(0, 6).map((order) => [orderReference(order), customerName(order.customer), orderStatusLabel(order.status), order.total])}
+                    rows={data.orders.slice(0, 6).map((order) => [orderReference(order), customerName(order.customer), orderStatusLabel(order.status), formatMoney(Number(order.total))])}
               />
             </Panel>
           </div>
@@ -2553,7 +2671,7 @@ function customerAddressLabel(customer: Customer): string {
   const address = customer.addresses?.[0];
   if (!address) return '';
 
-  return [address.street, address.city, address.province, address.reference ? `Ref: ${address.reference}` : '']
+  return [[address.street, address.streetNumber].filter(Boolean).join(' '), address.city, address.province, address.reference ? `Ref: ${address.reference}` : '']
     .filter(Boolean)
     .join(' - ');
 }
@@ -2582,11 +2700,11 @@ function tenantStatusLabel(status: string): string {
 }
 
 function orderReference(order?: Order | null): string {
-  return order ? `Pedido #${order.id.slice(-8)}` : 'Sin pedido';
+  return order ? `Pedido #${order.number}` : 'Sin pedido';
 }
 
 function invoicePaidAmount(invoice: Invoice): string {
-  return (Number(invoice.total) - Number(invoice.balance)).toFixed(2).replace(/\.00$/, '');
+  return formatMoney(Number(invoice.total) - Number(invoice.balance));
 }
 
 function routeStopTotal(stop: DeliveryRoute['orders'][number]): number {
@@ -2595,7 +2713,11 @@ function routeStopTotal(stop: DeliveryRoute['orders'][number]): number {
 }
 
 function formatMoney(value: number): string {
-  return value.toFixed(2).replace(/\.00$/, '');
+  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(value);
+}
+
+function orderAddressLabel(order: Order): string {
+  return [order.deliveryStreet, order.deliveryStreetNumber].filter(Boolean).join(' ');
 }
 
 function isAuthError(error: unknown): boolean {
@@ -2666,6 +2788,11 @@ function paymentMethodLabel(method: string): string {
   return labels[method] ?? method;
 }
 
+function capacityUnitLabel(unit: string): string {
+  const option = capacityUnitOptions.find(([value]) => value === unit);
+  return option ? option[1].toLowerCase() : unit;
+}
+
 function containerMovementLabel(type: string): string {
   const labels: Record<string, string> = {
     DELIVERED: 'Entregado',
@@ -2709,16 +2836,21 @@ function comodatoStatusLabel(status: string): string {
   return labels[status] ?? status;
 }
 
-function Field({ label, value, onChange, placeholder, type = 'text', required }: FieldProps) {
+function Field({ label, value, onChange, placeholder, type = 'text', required, maxLength, min, max, step, inputMode }: FieldProps) {
   return (
     <label className="grid gap-1.5 text-sm">
-      <span className="font-medium text-slate-700">{label}</span>
+      <span className="font-medium text-slate-700">{label}{required ? ' *' : ''}</span>
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         type={type}
         required={required}
+        maxLength={maxLength}
+        min={min}
+        max={max}
+        step={step}
+        inputMode={inputMode}
         className="h-10 min-w-0 border border-border bg-white px-3 text-sm outline-none focus:border-primary"
       />
     </label>
@@ -2740,7 +2872,7 @@ function Select({
 }) {
   return (
     <label className="grid gap-1.5 text-sm">
-      <span className="font-medium text-slate-700">{label}</span>
+      <span className="font-medium text-slate-700">{label}{required ? ' *' : ''}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -2970,7 +3102,7 @@ function RouteInvoicesSummary({ route }: { route: DeliveryRoute }) {
             {invoice ? (
               <>
                 <p className="truncate">{item.sequence}. {invoice.number} {invoiceStatusLabel(invoice.status)}</p>
-                <p className="text-xs text-slate-500">saldo {invoice.balance}</p>
+                <p className="text-xs text-slate-500">saldo {formatMoney(Number(invoice.balance))}</p>
               </>
             ) : (
               <span className="whitespace-nowrap">{item.sequence}. sin factura</span>
@@ -3029,7 +3161,7 @@ function RouteDetailPanel({ route, onClose }: { route: DeliveryRoute | null; onC
             formatMoney(stopTotal),
             `${formatMoney(stopCollected)} ${paymentMethodLabel(item.paymentMethod ?? 'CASH')}`,
             formatMoney(stopBalance),
-            invoice ? `${invoice.number} ${invoiceStatusLabel(invoice.status)} saldo ${invoice.balance}` : route.status === 'LOADED' ? 'Pendiente de cierre' : 'Sin factura'
+            invoice ? `${invoice.number} ${invoiceStatusLabel(invoice.status)} saldo ${formatMoney(Number(invoice.balance))}` : route.status === 'LOADED' ? 'Pendiente de cierre' : 'Sin factura'
           ];
         })}
       />
@@ -3046,7 +3178,7 @@ function PaymentAllocations({ payment }: { payment: Payment }) {
         <div key={allocation.id} className="min-w-0">
           <p className="truncate">{orderReference(allocation.invoice.order)} / {allocation.invoice.number}</p>
           <p className="text-xs text-slate-500">
-            total {allocation.invoice.total} · aplicado {allocation.amount} · saldo {allocation.invoice.balance}
+            total {formatMoney(Number(allocation.invoice.total))} · aplicado {formatMoney(Number(allocation.amount))} · saldo {formatMoney(Number(allocation.invoice.balance))}
           </p>
         </div>
       ))}

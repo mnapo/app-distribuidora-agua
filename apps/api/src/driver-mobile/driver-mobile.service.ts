@@ -155,9 +155,11 @@ export class DriverMobileService {
     const nextSequence = Math.max(0, ...route.orders.map((item) => item.sequence)) + 1;
 
     const result = await this.prisma.$transaction(async (tx) => {
+      const number = await this.nextOrderNumber(tx, tenantId);
       const order = await tx.order.create({
         data: {
           tenantId,
+          number,
           customerId: customer.id,
           createdById: user.id,
           status: 'ASSIGNED',
@@ -557,6 +559,11 @@ export class DriverMobileService {
         }
       }
     };
+  }
+
+  private async nextOrderNumber(tx: Prisma.TransactionClient, tenantId: string): Promise<number> {
+    const latest = await tx.order.aggregate({ where: { tenantId }, _max: { number: true } });
+    return (latest._max.number ?? 0) + 1;
   }
 
   private stopInclude() {

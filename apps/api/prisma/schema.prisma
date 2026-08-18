@@ -316,6 +316,7 @@ model CustomerAddress {
   tenantId         String   @map("tenant_id")
   customerId       String   @map("customer_id")
   street           String
+  streetNumber     String?  @map("street_number")
   city             String?
   province         String?
   postalCode       String?  @map("postal_code")
@@ -400,6 +401,7 @@ model Vehicle {
   model                      String?
   year                       Int?
   capacity                   Decimal?      @db.Decimal(12, 2)
+  capacityUnit               String        @default("unidad") @map("capacity_unit")
   status                     VehicleStatus @default(ACTIVE)
   insuranceExpiresAt          DateTime?     @map("insurance_expires_at")
   documentationExpiresAt      DateTime?     @map("documentation_expires_at")
@@ -547,6 +549,7 @@ model CustomerProductPrice {
 model Order {
   id                  String      @id @default(cuid())
   tenantId            String      @map("tenant_id")
+  number              Int
   customerId          String      @map("customer_id")
   deliveryAddressId   String?     @map("delivery_address_id")
   assignedDriverId    String?     @map("assigned_driver_id")
@@ -555,6 +558,7 @@ model Order {
   status              OrderStatus @default(DRAFT)
   requestedDeliveryAt DateTime?   @map("requested_delivery_at")
   deliveryStreet      String?     @map("delivery_street")
+  deliveryStreetNumber String?    @map("delivery_street_number")
   deliveryCity        String?     @map("delivery_city")
   deliveryProvince    String?     @map("delivery_province")
   deliveryPostalCode  String?     @map("delivery_postal_code")
@@ -588,6 +592,7 @@ model Order {
   @@index([tenantId, customerId])
   @@index([tenantId, requestedDeliveryAt])
   @@index([tenantId, assignedDriverId])
+  @@unique([tenantId, number])
   @@map("orders")
 }
 

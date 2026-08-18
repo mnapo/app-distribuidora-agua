@@ -21,6 +21,11 @@ export class CreateOrderDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(40)
+  deliveryStreetNumber?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(191)
   deliveryCity?: string;
 

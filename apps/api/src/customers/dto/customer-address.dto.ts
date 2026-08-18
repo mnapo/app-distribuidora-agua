@@ -8,10 +8,17 @@ export class CustomerAddressDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(40)
+  streetNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
   city?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   province?: string;
 
   @IsOptional()
