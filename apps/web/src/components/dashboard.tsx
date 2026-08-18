@@ -2794,6 +2794,17 @@ function orderItemsLabel(order?: Order | null): React.ReactNode {
   );
 }
 
+function cellSearchText(cell: React.ReactNode): string {
+  if (cell === null || cell === undefined || typeof cell === 'boolean') return '';
+  if (typeof cell === 'string' || typeof cell === 'number') return String(cell).toLowerCase();
+  if (Array.isArray(cell)) return cell.map(cellSearchText).join(' ');
+  if (typeof cell === 'object' && 'props' in cell) {
+    const element = cell as React.ReactElement<{ children?: React.ReactNode }>;
+    return cellSearchText(element.props.children);
+  }
+  return '';
+}
+
 function isAuthError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   return error.message.includes('401') || error.message.toLowerCase().includes('token');
@@ -3403,38 +3414,94 @@ function StatusLine({ label, value }: { label: string; value: string }) {
 }
 
 function Table({ headers, rows }: { headers: string[]; rows: React.ReactNode[][] }) {
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 8;
+  const searchable = rows.length > pageSize;
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredRows = normalizedQuery
+    ? rows.filter((row) => row.some((cell) => cellSearchText(cell).includes(normalizedQuery)))
+    : rows;
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const visibleRows = searchable ? filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize) : rows;
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, rows.length]);
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-max border-collapse text-left text-sm">
-        <thead>
-          <tr className="border-b border-border text-slate-500">
-            {headers.map((header) => (
-              <th key={header} className="whitespace-nowrap py-2 pr-4 font-medium">
-                {header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length ? (
-            rows.map((row, rowIndex) => (
-              <tr key={`${row.join('|')}-${rowIndex}`} className="border-b border-border last:border-0">
-                {row.map((cell, cellIndex) => (
-                  <td key={cellIndex} className="max-w-80 py-2 pr-4 align-top text-slate-700">
-                    {cell}
-                  </td>
-                ))}
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td className="py-3 text-slate-500" colSpan={headers.length}>
-                Sin datos
-              </td>
+    <div className="grid gap-3">
+      {searchable ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <label className="flex min-w-64 items-center gap-2 text-sm">
+            <span className="font-medium text-slate-700">Buscar</span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              className="h-9 min-w-0 flex-1 border border-border bg-white px-3 text-sm outline-none focus:border-primary"
+            />
+          </label>
+          <span className="text-xs text-slate-500">
+            {filteredRows.length} de {rows.length}
+          </span>
+        </div>
+      ) : null}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-max border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-border text-slate-500">
+              {headers.map((header) => (
+                <th key={header} className="whitespace-nowrap py-2 pr-4 font-medium">
+                  {header}
+                </th>
+              ))}
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {visibleRows.length ? (
+              visibleRows.map((row, rowIndex) => (
+                <tr key={`${row.map(cellSearchText).join('|')}-${rowIndex}`} className="border-b border-border last:border-0">
+                  {row.map((cell, cellIndex) => (
+                    <td key={cellIndex} className="max-w-80 py-2 pr-4 align-top text-slate-700">
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td className="py-3 text-slate-500" colSpan={headers.length}>
+                  Sin datos
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {searchable && totalPages > 1 ? (
+        <div className="flex flex-wrap items-center justify-end gap-2 text-sm">
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            disabled={currentPage === 1}
+            className="border border-border px-3 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Anterior
+          </button>
+          <span className="text-slate-600">
+            Pagina {currentPage} de {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            disabled={currentPage === totalPages}
+            className="border border-border px-3 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Siguiente
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
