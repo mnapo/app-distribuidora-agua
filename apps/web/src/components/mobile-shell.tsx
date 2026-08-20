@@ -59,6 +59,7 @@ type MobileDebt = {
 };
 
 type PaymentChoice = 'FULL' | 'PARTIAL' | 'NONE';
+type MobileActionTab = 'customer' | 'payment' | 'sale';
 
 function readStoredSession(): AuthResponse | null {
   try {
@@ -102,6 +103,7 @@ export function MobileShell() {
   const [savingStop, setSavingStop] = useState(false);
   const [queue, setQueue] = useState<QueuedOperation[]>([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [activeActionTab, setActiveActionTab] = useState<MobileActionTab>('payment');
 
   useEffect(() => {
     const storedSession = readStoredSession();
@@ -618,6 +620,40 @@ export function MobileShell() {
           {catalog.customers.length} clientes · {catalog.products.length} productos
         </p>
 
+        <div className="grid grid-cols-3 gap-1 border border-border bg-white p-1" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeActionTab === 'customer'}
+            onClick={() => setActiveActionTab('customer')}
+            className={`inline-flex h-10 items-center justify-center gap-1 text-xs font-semibold ${activeActionTab === 'customer' ? 'bg-cyan-50 text-primary' : 'text-slate-600'}`}
+          >
+            <UserPlus className="h-4 w-4" />
+            Cliente
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeActionTab === 'payment'}
+            onClick={() => setActiveActionTab('payment')}
+            className={`inline-flex h-10 items-center justify-center gap-1 text-xs font-semibold ${activeActionTab === 'payment' ? 'bg-cyan-50 text-primary' : 'text-slate-600'}`}
+          >
+            <CreditCard className="h-4 w-4" />
+            Cobrar
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeActionTab === 'sale'}
+            onClick={() => setActiveActionTab('sale')}
+            className={`inline-flex h-10 items-center justify-center gap-1 text-xs font-semibold ${activeActionTab === 'sale' ? 'bg-cyan-50 text-primary' : 'text-slate-600'}`}
+          >
+            <ShoppingCart className="h-4 w-4" />
+            Venta
+          </button>
+        </div>
+
+        {activeActionTab === 'customer' ? (
         <section className="border border-border bg-white p-3">
           <div className="mb-3 flex items-center gap-2">
             <UserPlus className="h-4 w-4 text-primary" />
@@ -637,7 +673,9 @@ export function MobileShell() {
             </button>
           </div>
         </section>
+        ) : null}
 
+        {activeActionTab === 'payment' ? (
         <section className="border border-border bg-white p-3">
           <div className="mb-3 flex items-center gap-2">
             <CreditCard className="h-4 w-4 text-primary" />
@@ -704,7 +742,9 @@ export function MobileShell() {
             </button>
           </div>
         </section>
+        ) : null}
 
+        {activeActionTab === 'sale' ? (
         <section className="border border-border bg-white p-3">
           <div className="mb-3 flex items-center gap-2">
             <ShoppingCart className="h-4 w-4 text-primary" />
@@ -752,6 +792,7 @@ export function MobileShell() {
             </button>
           </div>
         </section>
+        ) : null}
 
         {routes.map((route) => (
           <section key={route.id} className="border border-border bg-white p-3">
