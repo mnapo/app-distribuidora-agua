@@ -723,7 +723,7 @@ export function MobileShell() {
               </div>
             ) : null}
             <div className="grid grid-cols-2 gap-2">
-              <input value={mobilePayment.amount} onChange={(event) => setMobilePayment({ ...mobilePayment, amount: event.target.value })} type="number" className="h-11 border border-border px-3 text-sm" placeholder="Importe" />
+              <input value={mobilePayment.amount} onChange={(event) => setMobilePayment({ ...mobilePayment, amount: event.target.value })} type="number" inputMode="decimal" min="0" step="0.01" className="h-11 border border-border px-3 text-sm" placeholder="Importe" />
               <select value={mobilePayment.method} onChange={(event) => setMobilePayment({ ...mobilePayment, method: event.target.value })} className="h-11 border border-border px-3 text-sm">
                 <option value="TRANSFER">Transferencia</option>
                 <option value="CASH">Efectivo</option>
@@ -780,8 +780,8 @@ export function MobileShell() {
               ))}
             </select>
             <div className="grid grid-cols-2 gap-2">
-              <input value={newSale.quantity} onChange={(event) => setNewSale({ ...newSale, quantity: event.target.value })} type="number" className="h-11 border border-border px-3 text-sm" placeholder="Cantidad" />
-              <input value={newSale.unitPrice} onChange={(event) => setNewSale({ ...newSale, unitPrice: event.target.value })} type="number" className="h-11 border border-border px-3 text-sm" placeholder="Precio" />
+              <input value={newSale.quantity} onChange={(event) => setNewSale({ ...newSale, quantity: event.target.value })} type="number" inputMode="decimal" min="0" step="0.001" className="h-11 border border-border px-3 text-sm" placeholder="Cantidad" />
+              <input value={newSale.unitPrice} onChange={(event) => setNewSale({ ...newSale, unitPrice: event.target.value })} type="number" inputMode="decimal" min="0" step="0.01" className="h-11 border border-border px-3 text-sm" placeholder="Precio" />
             </div>
             <button
               onClick={() => void createMobileSale()}
@@ -852,8 +852,8 @@ export function MobileShell() {
                       <span className="shrink-0 text-xs text-slate-500">{item.source === 'ADDITIONAL' ? 'Extra' : 'Pedido'}</span>
                     </div>
                     <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_40px] gap-2">
-                      <input value={item.deliveredQuantity} onChange={(event) => updateItem(index, { deliveredQuantity: event.target.value })} type="number" className="h-10 min-w-0 border border-border px-2 text-sm" />
-                      <input value={item.unitPrice} onChange={(event) => updateItem(index, { unitPrice: event.target.value })} type="number" className="h-10 min-w-0 border border-border px-2 text-sm" />
+                      <input value={item.deliveredQuantity} onChange={(event) => updateItem(index, { deliveredQuantity: event.target.value })} type="number" inputMode="decimal" min="0" step="0.001" className="h-10 min-w-0 border border-border px-2 text-sm" />
+                      <input value={item.unitPrice} onChange={(event) => updateItem(index, { unitPrice: event.target.value })} type="number" inputMode="decimal" min="0" step="0.01" className="h-10 min-w-0 border border-border px-2 text-sm" />
                       <button type="button" onClick={() => removeItem(index)} className="grid h-10 w-10 place-items-center border border-red-200 text-red-700">
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -873,8 +873,8 @@ export function MobileShell() {
                     ))}
                   </select>
                   <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_40px] gap-2">
-                    <input value={extraQuantity} onChange={(event) => setExtraQuantity(event.target.value)} type="number" className="h-10 min-w-0 border border-border px-2 text-sm" placeholder="Cant." />
-                    <input value={extraPrice} onChange={(event) => setExtraPrice(event.target.value)} type="number" className="h-10 min-w-0 border border-border px-2 text-sm" placeholder="Precio" />
+                    <input value={extraQuantity} onChange={(event) => setExtraQuantity(event.target.value)} type="number" inputMode="decimal" min="0" step="0.001" className="h-10 min-w-0 border border-border px-2 text-sm" placeholder="Cant." />
+                    <input value={extraPrice} onChange={(event) => setExtraPrice(event.target.value)} type="number" inputMode="decimal" min="0" step="0.01" className="h-10 min-w-0 border border-border px-2 text-sm" placeholder="Precio" />
                     <button type="button" onClick={addExtraItem} className="grid h-10 w-10 place-items-center bg-slate-900 text-white">
                       <Plus className="h-4 w-4" />
                     </button>
@@ -903,6 +903,9 @@ export function MobileShell() {
                     value={collectedAmount}
                     onChange={(event) => setCollectedAmount(event.target.value)}
                     type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
                     disabled={paymentChoice !== 'PARTIAL'}
                     className="h-11 min-w-0 border border-border px-3 text-sm disabled:bg-slate-100 disabled:text-slate-500"
                     placeholder="Importe cobrado"
